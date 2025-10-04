@@ -29,7 +29,7 @@ function Home() {
     return `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=${perms}&scope=bot%20applications.commands&guild_id=${guildId}`;
   };
 
-  const oauthLoginFor = (redirect) => `/api/auth/login?redirect=${encodeURIComponent(redirect)}`;
+  const oauthLoginFor = (redirect) => `${import.meta.env.VITE_API_URL || ''}/api/auth/login?redirect=${encodeURIComponent(redirect)}`;
 
   return (
     <div className="p-6">
