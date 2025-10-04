@@ -1,8 +1,8 @@
 import express from 'express';
-import logger from '../../../utils/logger.js';
-import Guild from '../../../models/Guild.js';
-import User from '../../../models/User.js';
-import { xpForLevel } from '../../../bot/utils/levelSystem.js';
+import logger from '../../utils/logger.js';
+import Guild from '../../models/Guild.js';
+import User from '../../models/User.js';
+import { xpForLevel } from '../../bot/utils/levelSystem.js';
 
 const router = express.Router();
 
