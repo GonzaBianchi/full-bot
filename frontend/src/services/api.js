@@ -14,4 +14,11 @@ export const guildService = {
   getResources: (guildId) => api.get(`/guilds/${guildId}/resources`),
 };
 
-export default { guildService };
+export const leaderboardService = {
+  // Public leaderboard (no auth)
+  getPublic: (guildId, page = 1, limit = 10) => api.get(`/leaderboard/public/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
+  // Authenticated leaderboard (if needed)
+  get: (guildId, page = 1, limit = 10) => api.get(`/leaderboard/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
+};
+
+export default { guildService, leaderboardService };
