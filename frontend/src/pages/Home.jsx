@@ -29,7 +29,9 @@ function Home() {
     return `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=${perms}&scope=bot%20applications.commands&guild_id=${guildId}`;
   };
 
-  const oauthLoginFor = (redirect) => `${import.meta.env.VITE_API_URL || ''}/api/auth/login?redirect=${encodeURIComponent(redirect)}`;
+  // Use VITE_API_URL when set; fallback to backend on Render so login goes to the API service
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com';
+  const oauthLoginFor = (redirect) => `${API_BASE.replace(/\/$/, '')}/api/auth/login?redirect=${encodeURIComponent(redirect)}`;
 
   return (
     <div className="p-6">
