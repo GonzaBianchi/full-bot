@@ -5,6 +5,8 @@ import passport from 'passport';
 import { Strategy as DiscordStrategy } from 'passport-discord';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import mongoose from 'mongoose';
+import MongoStore from 'connect-mongo';
 
 import logger from '../utils/logger.js';
 
@@ -24,6 +26,11 @@ class ApiServer {
   }
 
   setupMiddleware() {
+    // Trust proxy when behind a proxy (Render, etc.) so secure cookies and IPs work correctly
+    if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === '1') {
+      this.app.set('trust proxy', 1);
+    }
+
     // CORS
     this.app.use(cors({
       origin: process.env.FRONTEND_URL,
@@ -57,16 +64,30 @@ class ApiServer {
       next();
     });
 
-    // Session
-    this.app.use(session({
+    // Session -> use a persistent store in production (connect-mongo)
+    const sessionCookie = {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000 // 24 horas
+    };
+
+    const sessionOptions = {
       secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
-      cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 24 * 60 * 60 * 1000 // 24 horas
-      }
-    }));
+      cookie: sessionCookie
+    };
+
+    if (process.env.MONGODB_URI) {
+      sessionOptions.store = MongoStore.create({
+        mongoUrl: process.env.MONGODB_URI,
+        collectionName: 'sessions',
+        ttl: 14 * 24 * 60 * 60 // 14 days
+      });
+    }
+
+    this.app.use(session(sessionOptions));
 
     // Rate limiting
     const limiter = rateLimit({
@@ -109,6 +130,34 @@ class ApiServer {
         uptime: process.uptime(),
         bot: this.discordClient && this.discordClient.user ? 'connected' : 'disconnected'
       });
+    });
+
+    // Readiness endpoint: comprueba DB y Discord client (útil para deploys y checks más profundos)
+    this.app.get('/ready', async (req, res) => {
+      try {
+        const dbState = mongoose.connection.readyState; // 1 = connected
+        const dbConnected = dbState === 1;
+        const discordReady = this.discordClient && typeof this.discordClient.isReady === 'function' ? this.discordClient.isReady() : (this.discordClient && this.discordClient.user ? true : false);
+
+        const ready = dbConnected && discordReady;
+        const statusCode = ready ? 200 : 503;
+
+        return res.status(statusCode).json({
+          ready,
+          db: {
+            readyState: dbState,
+            connected: dbConnected
+          },
+          discord: {
+            ready: Boolean(discordReady),
+            user: this.discordClient && this.discordClient.user ? this.discordClient.user.tag : null
+          },
+          timestamp: new Date().toISOString()
+        });
+      } catch (e) {
+        logger.error('Error checking readiness:', e);
+        return res.status(500).json({ ready: false, error: String(e) });
+      }
     });
 
     // Pasar el cliente de Discord a las rutas
