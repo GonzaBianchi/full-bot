@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { guildService } from '../services/api';
+import { guildService, authService } from '../services/api';
 
 function Home() {
   const [botInfo, setBotInfo] = useState(null);
@@ -8,30 +8,37 @@ function Home() {
 
   useEffect(() => {
     load();
-    fetch('/api/auth/me', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(u => setUser(u)).catch(() => setUser(null));
+    loadUser();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const response = await authService.getMe();
+      setUser(response.data);
+    } catch (error) {
+      console.error('Error loading user:', error);
+      setUser(null);
+    }
+  };
 
   const load = async () => {
     try {
       const [botRes, availRes] = await Promise.all([
-        fetch('/api/guilds/bot/info', { credentials: 'include' }).then(r => r.ok ? r.json() : null),
-        fetch('/api/guilds/available', { credentials: 'include' }).then(r => r.ok ? r.json() : { manageable: [], invitables: [] })
+        guildService.getBotInfo().catch(() => null),
+        guildService.getAvailable().catch(() => ({ data: { manageable: [], invitables: [] } }))
       ]);
-      setBotInfo(botRes);
-      setAvailable(availRes || { manageable: [], invitables: [] });
+      
+      setBotInfo(botRes?.data);
+      setAvailable(availRes?.data || { manageable: [], invitables: [] });
     } catch (e) {
-      console.error(e);
+      console.error('Error loading data:', e);
     }
   };
 
   const inviteUrlFor = (clientId, guildId) => {
-    const perms = 8 | 1024 | 2048 | 268435456; // admin + manage roles, manage channels, send messages? keep safe
+    const perms = 8 | 1024 | 2048 | 268435456;
     return `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=${perms}&scope=bot%20applications.commands&guild_id=${guildId}`;
   };
-
-  // Use VITE_API_URL when set; fallback to backend on Render so login goes to the API service
-  const API_BASE = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com';
-  const oauthLoginFor = (redirect) => `${API_BASE.replace(/\/$/, '')}/api/auth/login?redirect=${encodeURIComponent(redirect)}`;
 
   return (
     <div className="p-6">
@@ -58,9 +65,13 @@ function Home() {
             {available.invitables.map(g => (
               <li key={g.id} className="mt-2">
                 {user ? (
-                  <a href={inviteUrlFor(import.meta.env.VITE_DISCORD_CLIENT_ID, g.id)} className="px-3 py-2 bg-discord-blurple rounded text-white">Invitar a {g.name}</a>
+                  <a href={inviteUrlFor(import.meta.env.VITE_DISCORD_CLIENT_ID, g.id)} className="px-3 py-2 bg-discord-blurple rounded text-white">
+                    Invitar a {g.name}
+                  </a>
                 ) : (
-                  <a href={oauthLoginFor(`/`)} className="px-3 py-2 bg-discord-blurple rounded text-white">Inicia sesión para invitar</a>
+                  <a href={authService.login('/')} className="px-3 py-2 bg-discord-blurple rounded text-white">
+                    Inicia sesión para invitar
+                  </a>
                 )}
               </li>
             ))}
@@ -77,9 +88,13 @@ function Home() {
             {available.manageable.map(g => (
               <li key={g.id} className="mt-2">
                 {user ? (
-                  <a href={`/guild/${g.id}`} className="px-3 py-2 bg-discord-gray rounded text-white">Ir al panel de {g.name}</a>
+                  <a href={`/guild/${g.id}`} className="px-3 py-2 bg-discord-gray rounded text-white">
+                    Ir al panel de {g.name}
+                  </a>
                 ) : (
-                  <a href={oauthLoginFor(`/guild/${g.id}`)} className="px-3 py-2 bg-discord-gray rounded text-white">Inicia sesión para ir al panel</a>
+                  <a href={authService.login(`/guild/${g.id}`)} className="px-3 py-2 bg-discord-gray rounded text-white">
+                    Inicia sesión para ir al panel
+                  </a>
                 )}
               </li>
             ))}
