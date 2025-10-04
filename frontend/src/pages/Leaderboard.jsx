@@ -1,3 +1,4 @@
+// ...existing code...
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { leaderboardService } from '../services/api';
@@ -42,7 +43,8 @@ function Leaderboard() {
   };
 
   const getProgressPercentage = (user) => {
-    return Math.floor((user.xp / user.xpForNextLevel) * 100);
+    const denom = user.xpForNextLevel || 1;
+    return Math.floor((user.xp / denom) * 100);
   };
 
   if (loading && leaderboard.length === 0) {
@@ -103,7 +105,7 @@ function Leaderboard() {
               </thead>
               <tbody className="divide-y divide-gray-700">
                 {leaderboard.map(user => (
-                  <tr 
+                  <tr
                     key={user.userId}
                     className="hover:bg-discord-dark/50 transition-colors"
                   >
@@ -118,7 +120,10 @@ function Leaderboard() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center space-x-3">
                         <img
-                          src={user.avatar || `https://cdn.discordapp.com/embed/avatars/${parseInt(user.discriminator) % 5}.png`}
+                          src={
+                            user.avatar ||
+                            `https://cdn.discordapp.com/embed/avatars/${(parseInt(user.discriminator || '0') % 5)}.png`
+                          }
                           alt={user.username}
                           className="w-10 h-10 rounded-full"
                         />
@@ -177,7 +182,19 @@ function Leaderboard() {
               <div className="text-sm text-discord-lightgray">
                 Mostrando {((currentPage - 1) * pagination.limit) + 1} - {Math.min(currentPage * pagination.limit, pagination.totalUsers)} de {pagination.totalUsers}
               </div>
-              <div className="flex space-x-2">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-2 bg-discord-gray hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+
+                <span className="px-4 py-2 bg-discord-blurple text-white rounded font-semibold">
+                  {currentPage} / {pagination.totalPages}
+                </span>
+
                 <button
                   onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
                   disabled={currentPage === pagination.totalPages}
@@ -194,14 +211,4 @@ function Leaderboard() {
   );
 }
 
-export default Leaderboard;.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-2 bg-discord-gray hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <span className="px-4 py-2 bg-discord-blurple text-white rounded font-semibold">
-                  {currentPage} / {pagination.totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(p => Math
+export default Leaderboard;

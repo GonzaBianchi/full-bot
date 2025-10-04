@@ -4,6 +4,9 @@ import session from 'express-session';
 import passport from 'passport';
 import { Strategy as DiscordStrategy } from 'passport-discord';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+
+import logger from '../utils/logger.js';
 
 // Importar rutas
 import authRoutes from './routes/auth.js';
@@ -27,9 +30,32 @@ class ApiServer {
       credentials: true
     }));
 
+    // Helmet - cabeceras de seguridad
+    this.app.use(helmet());
+
     // Body parser
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
+
+    // Simple request logger (no deps)
+    this.app.use((req, res, next) => {
+      const start = Date.now();
+      res.on('finish', () => {
+        const duration = Date.now() - start;
+        logger.info(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
+      });
+      next();
+    });
+
+    // Security headers (alternativa ligera a helmet)
+    this.app.use((req, res, next) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+      next();
+    });
 
     // Session
     this.app.use(session({
@@ -80,7 +106,8 @@ class ApiServer {
       res.status(200).json({ 
         status: 'ok', 
         timestamp: new Date().toISOString(),
-        bot: this.discordClient.user ? 'connected' : 'disconnected'
+        uptime: process.uptime(),
+        bot: this.discordClient && this.discordClient.user ? 'connected' : 'disconnected'
       });
     });
 
@@ -103,18 +130,59 @@ class ApiServer {
 
     // Error handler
     this.app.use((err, req, res, next) => {
-      console.error('❌ Error en API:', err);
+      try {
+        logger.error('❌ Error en API:', err && err.stack ? err.stack : err);
+      } catch (e) {
+        console.error('Error logger fallback:', e);
+        console.error(err);
+      }
+
       res.status(500).json({ 
         error: 'Error interno del servidor',
-        message: process.env.NODE_ENV === 'development' ? err.message : undefined
+        message: process.env.NODE_ENV === 'development' ? (err && err.message) : undefined
       });
     });
+  }
+
+  async shutdown() {
+    logger.info('Iniciando shutdown...');
+    try {
+      if (this.server) {
+        this.server.close(() => {
+          logger.info('Servidor HTTP cerrado');
+        });
+      }
+
+      if (this.discordClient && typeof this.discordClient.destroy === 'function') {
+        try {
+          await this.discordClient.destroy();
+          logger.info('Cliente de Discord desconectado');
+        } catch (e) {
+          logger.warn('Error cerrando cliente de Discord:', e);
+        }
+      }
+    } catch (e) {
+      logger.error('Error durante shutdown:', e);
+    } finally {
+      // esperar un instante para que se cierren conexiones
+      setTimeout(() => process.exit(0), 500);
+    }
   }
 
   start(port) {
     return new Promise((resolve) => {
       this.server = this.app.listen(port, () => {
-        console.log(`🚀 API ejecutándose en puerto ${port}`);
+        logger.info(`🚀 API ejecutándose en puerto ${port}`);
+        // Manejo de señales para graceful shutdown
+        process.on('SIGINT', () => {
+          logger.info('SIGINT recibido, cerrando...');
+          this.shutdown();
+        });
+        process.on('SIGTERM', () => {
+          logger.info('SIGTERM recibido, cerrando...');
+          this.shutdown();
+        });
+
         resolve(this.server);
       });
     });
