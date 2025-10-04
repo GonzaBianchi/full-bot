@@ -1,0 +1,23 @@
+{
+  "name": "discord-bot-backend",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.0.1",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1",
+    "mongoose": "^8.16.1",
+    "passport": "^0.7.0",
+    "passport-discord": "^0.1.4",
+    "socket.io": "^4.8.1"
+  }
+}
