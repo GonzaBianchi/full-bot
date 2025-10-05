@@ -15,7 +15,7 @@ function Navbar({ user, onLogout }) {
         <div className="flex justify-between items-center h-16">
           <Link to="/" className="flex items-center space-x-3">
             <Home className="w-6 h-6 text-[#5865f2]" />
-            <span className="text-white font-bold text-xl">Bot Dashboard</span>
+            <span className="text-white font-bold text-xl">Bot RunicHexCore</span>
           </Link>
 
           <div className="flex items-center space-x-4">
@@ -26,7 +26,7 @@ function Navbar({ user, onLogout }) {
                 className="w-8 h-8 rounded-full"
               />
               <span className="text-white font-medium">
-                {user.username}#{user.discriminator}
+                {user.username}
               </span>
             </div>
             
