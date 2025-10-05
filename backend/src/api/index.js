@@ -15,7 +15,6 @@ import authRoutes from './routes/auth.js';
 import guildRoutes from './routes/guilds.js';
 import levelRoutes from './routes/levels.js';
 import leaderboardRoutes from './routes/leaderboard.js';
-import autoRolesRoutes from './routes/autoRoles.js'; // ← AGREGADO
 
 class ApiServer {
   constructor(discordClient) {
@@ -168,9 +167,10 @@ class ApiServer {
     });
 
     // Rutas de la API
+    // IMPORTANTE: Solo registrar cada ruta UNA VEZ
+    // guildRoutes ya incluye autoRolesRoutes y roleMenusRoutes internamente
     this.app.use('/api/auth', authRoutes);
-    this.app.use('/api/guilds', guildRoutes);
-    this.app.use('/api/guilds', autoRolesRoutes); // ← AGREGADO (monta en /api/guilds)
+    this.app.use('/api/guilds', guildRoutes); // Incluye auto-roles y role-menus
     this.app.use('/api/levels', levelRoutes);
     this.app.use('/api/leaderboard', leaderboardRoutes);
 
