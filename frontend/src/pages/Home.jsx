@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { guildService, authService } from '../services/api';
 import { Users, Settings, TrendingUp, Shield, ExternalLink } from 'lucide-react';
+import { authService, guildService } from '../services/api';
 
 function Home() {
   const [botInfo, setBotInfo] = useState(null);
@@ -14,7 +14,7 @@ function Home() {
 
   const loadUser = async () => {
     try {
-      const response = await mockAuthService.getMe();
+      const response = await authService.getMe();
       setUser(response.data);
     } catch (error) {
       setUser(null);
@@ -25,8 +25,8 @@ function Home() {
     try {
       await loadUser();
       const [botRes, availRes] = await Promise.all([
-        mockGuildService.getBotInfo().catch(() => null),
-        mockGuildService.getAvailable().catch(() => ({ data: { manageable: [], invitables: [] } }))
+        guildService.getBotInfo().catch(() => null),
+        guildService.getAvailable().catch(() => ({ data: { manageable: [], invitables: [] } }))
       ]);
       
       setBotInfo(botRes?.data);
@@ -195,7 +195,7 @@ function Home() {
                           </a>
                         ) : (
                           <a 
-                            href={mockAuthService.login(`/guild/${g.id}`)}
+                            href={authService.login(`/guild/${g.id}`)}
                             className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm font-medium transition-colors"
                           >
                             Iniciar sesión
@@ -252,7 +252,7 @@ function Home() {
                         </div>
                         {user ? (
                           <a 
-                            href={inviteUrlFor('import.meta.env.VITE_DISCORD_CLIENT_ID', g.id)}
+                            href={inviteUrlFor(import.meta.env.VITE_DISCORD_CLIENT_ID, g.id)}
                             className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
                           >
                             <span>Invitar</span>
@@ -260,7 +260,7 @@ function Home() {
                           </a>
                         ) : (
                           <a 
-                            href={mockAuthService.login('/')}
+                            href={authService.login('/')}
                             className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm font-medium transition-colors"
                           >
                             Iniciar sesión
