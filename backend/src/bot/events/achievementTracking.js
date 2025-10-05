@@ -5,12 +5,19 @@ import logger from '../../utils/logger.js';
  * Configura los event listeners para trackear logros
  */
 export function setupAchievementTracking(client) {
-  // 1. Trackear mensajes (ya tienes messageCreate, agregar tracking ahí)
+  // Inyectar el cliente de Discord en el service para notificaciones
+  achievementService.setClient(client);
+
+  // 1. Trackear mensajes
   client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
     
     try {
-      await achievementService.trackMessage(message.author.id, message.guild.id);
+      await achievementService.trackMessage(
+        message.author.id, 
+        message.guild.id,
+        message.channel.id // ← Pasar el channelId para notificaciones
+      );
     } catch (error) {
       logger.error('Error tracking message for achievements:', error);
     }
@@ -28,7 +35,8 @@ export function setupAchievementTracking(client) {
       if (!reaction.message.author.bot) {
         await achievementService.trackReaction(
           reaction.message.author.id, 
-          reaction.message.guild.id
+          reaction.message.guild.id,
+          reaction.message.channel.id // ← Pasar el channelId
         );
       }
     } catch (error) {
@@ -51,12 +59,12 @@ export function setupAchievementTracking(client) {
       
       // Usuario salió de un canal
       if (oldState.channelId && !newState.channelId) {
-        await achievementService.trackVoiceLeave(userId, guildId);
+        await achievementService.trackVoiceLeave(userId, guildId, oldState.channelId);
       }
       
-      // Usuario cambió de canal (contar como salida y entrada)
+      // Usuario cambió de canal
       if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
-        await achievementService.trackVoiceLeave(userId, guildId);
+        await achievementService.trackVoiceLeave(userId, guildId, oldState.channelId);
         await achievementService.trackVoiceJoin(userId, guildId, newState.channelId);
       }
     } catch (error) {

@@ -26,7 +26,7 @@ class ApiServer {
   }
 
   setupMiddleware() {
-    // Trust proxy when behind a proxy (Render, etc.) so secure cookies and IPs work correctly
+    // Trust proxy when behind a proxy (Render, etc.)
     if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === '1') {
       this.app.set('trust proxy', 1);
     }
@@ -44,7 +44,7 @@ class ApiServer {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
 
-    // Simple request logger (no deps)
+    // Simple request logger
     this.app.use((req, res, next) => {
       const start = Date.now();
       res.on('finish', () => {
@@ -54,7 +54,7 @@ class ApiServer {
       next();
     });
 
-    // Security headers (alternativa ligera a helmet)
+    // Security headers
     this.app.use((req, res, next) => {
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('X-Frame-Options', 'DENY');
@@ -64,7 +64,7 @@ class ApiServer {
       next();
     });
 
-    // Session -> use a persistent store in production (connect-mongo)
+    // Session
     const sessionCookie = {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
@@ -83,7 +83,7 @@ class ApiServer {
       sessionOptions.store = MongoStore.create({
         mongoUrl: process.env.MONGODB_URI,
         collectionName: 'sessions',
-        ttl: 14 * 24 * 60 * 60 // 14 days
+        ttl: 14 * 24 * 60 * 60
       });
     }
 
@@ -91,8 +91,8 @@ class ApiServer {
 
     // Rate limiting
     const limiter = rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutos
-      max: 100 // límite de 100 requests por ventana
+      windowMs: 15 * 60 * 1000,
+      max: 100
     });
     this.app.use('/api/', limiter);
 
@@ -122,7 +122,7 @@ class ApiServer {
   }
 
   setupRoutes() {
-    // Health check para mantener Render activo
+    // Health check
     this.app.get('/health', (req, res) => {
       res.status(200).json({ 
         status: 'ok', 
@@ -132,12 +132,14 @@ class ApiServer {
       });
     });
 
-    // Readiness endpoint: comprueba DB y Discord client (útil para deploys y checks más profundos)
+    // Readiness endpoint
     this.app.get('/ready', async (req, res) => {
       try {
-        const dbState = mongoose.connection.readyState; // 1 = connected
+        const dbState = mongoose.connection.readyState;
         const dbConnected = dbState === 1;
-        const discordReady = this.discordClient && typeof this.discordClient.isReady === 'function' ? this.discordClient.isReady() : (this.discordClient && this.discordClient.user ? true : false);
+        const discordReady = this.discordClient && typeof this.discordClient.isReady === 'function' ? 
+          this.discordClient.isReady() : 
+          (this.discordClient && this.discordClient.user ? true : false);
 
         const ready = dbConnected && discordReady;
         const statusCode = ready ? 200 : 503;
@@ -166,13 +168,13 @@ class ApiServer {
       next();
     });
 
-    // Rutas de la API
-    // IMPORTANTE: Solo registrar cada ruta UNA VEZ
-    // guildRoutes ya incluye autoRolesRoutes y roleMenusRoutes internamente
+    // ========== Rutas de la API ==========
+    // IMPORTANTE: guildRoutes ya incluye achievements, autoRoles y roleMenus internamente
     this.app.use('/api/auth', authRoutes);
-    this.app.use('/api/guilds', guildRoutes); // Incluye auto-roles y role-menus
+    this.app.use('/api/guilds', guildRoutes); // ← Incluye achievements, auto-roles y role-menus
     this.app.use('/api/levels', levelRoutes);
     this.app.use('/api/leaderboard', leaderboardRoutes);
+    // ====================================
 
     // Ruta 404
     this.app.use('*', (req, res) => {
@@ -215,7 +217,6 @@ class ApiServer {
     } catch (e) {
       logger.error('Error durante shutdown:', e);
     } finally {
-      // esperar un instante para que se cierren conexiones
       setTimeout(() => process.exit(0), 500);
     }
   }
@@ -224,11 +225,12 @@ class ApiServer {
     return new Promise((resolve) => {
       this.server = this.app.listen(port, () => {
         logger.info(`🚀 API ejecutándose en puerto ${port}`);
-        // Manejo de señales para graceful shutdown
+        
         process.on('SIGINT', () => {
           logger.info('SIGINT recibido, cerrando...');
           this.shutdown();
         });
+        
         process.on('SIGTERM', () => {
           logger.info('SIGTERM recibido, cerrando...');
           this.shutdown();

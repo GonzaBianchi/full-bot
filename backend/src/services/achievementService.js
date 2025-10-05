@@ -3,15 +3,27 @@ import UserAchievement from '../models/UserAchievement.js';
 import logger from '../utils/logger.js';
 
 class AchievementService {
+  constructor() {
+    this.discordClient = null;
+  }
+
+  /**
+   * Inyectar el cliente de Discord para enviar notificaciones
+   */
+  setClient(client) {
+    this.discordClient = client;
+    logger.info('✅ Discord client inyectado en AchievementService');
+  }
+
   /**
    * Trackea un mensaje enviado por un usuario
    */
-  async trackMessage(userId, guildId) {
+  async trackMessage(userId, guildId, channelId = null) {
     try {
       const userAch = await this.getUserAchievement(userId, guildId);
       userAch.stats.totalMessages += 1;
       
-      await this.checkAndUnlockAchievements(userAch, 'messages');
+      await this.checkAndUnlockAchievements(userAch, 'messages', channelId);
       await userAch.save();
     } catch (error) {
       logger.error('Error tracking message achievement:', error);
@@ -21,12 +33,12 @@ class AchievementService {
   /**
    * Trackea una reacción recibida por un usuario
    */
-  async trackReaction(userId, guildId) {
+  async trackReaction(userId, guildId, channelId = null) {
     try {
       const userAch = await this.getUserAchievement(userId, guildId);
       userAch.stats.totalReactions += 1;
       
-      await this.checkAndUnlockAchievements(userAch, 'reactions');
+      await this.checkAndUnlockAchievements(userAch, 'reactions', channelId);
       await userAch.save();
     } catch (error) {
       logger.error('Error tracking reaction achievement:', error);
@@ -52,7 +64,7 @@ class AchievementService {
   /**
    * Trackea tiempo en voice cuando un usuario sale
    */
-  async trackVoiceLeave(userId, guildId) {
+  async trackVoiceLeave(userId, guildId, channelId = null) {
     try {
       const userAch = await this.getUserAchievement(userId, guildId);
       
@@ -61,7 +73,7 @@ class AchievementService {
         userAch.stats.totalVoiceTime += duration;
         userAch.currentVoiceSession = { channelId: null, joinedAt: null };
         
-        await this.checkAndUnlockAchievements(userAch, 'voice_time');
+        await this.checkAndUnlockAchievements(userAch, 'voice_time', channelId);
         await userAch.save();
       }
     } catch (error) {
@@ -72,12 +84,12 @@ class AchievementService {
   /**
    * Trackea boost del servidor
    */
-  async trackBoost(userId, guildId) {
+  async trackBoost(userId, guildId, channelId = null) {
     try {
       const userAch = await this.getUserAchievement(userId, guildId);
       userAch.stats.hasBoosted = true;
       
-      await this.checkAndUnlockAchievements(userAch, 'boost');
+      await this.checkAndUnlockAchievements(userAch, 'boost', channelId);
       await userAch.save();
     } catch (error) {
       logger.error('Error tracking boost achievement:', error);
@@ -111,7 +123,7 @@ class AchievementService {
   /**
    * Verifica y desbloquea logros según el progreso
    */
-  async checkAndUnlockAchievements(userAch, type) {
+  async checkAndUnlockAchievements(userAch, type, channelId = null) {
     const achievements = await Achievement.find({ 
       guildId: userAch.guildId, 
       type, 
@@ -161,10 +173,126 @@ class AchievementService {
             `🏆 Usuario ${userAch.userId} desbloqueó: ${achievement.name} - ${tier.title} en guild ${userAch.guildId}`
           );
           
-          // Aquí puedes emitir un evento para notificar al usuario
-          // o asignar roles si está configurado
+          // Enviar notificación
+          await this.sendAchievementNotification(
+            userAch.userId,
+            userAch.guildId,
+            achievement,
+            tier,
+            channelId
+          );
+          
+          // Asignar rol de recompensa si está configurado
+          if (tier.rewardRoleId) {
+            await this.assignRewardRole(userAch.userId, userAch.guildId, tier.rewardRoleId);
+          }
         }
       }
+    }
+  }
+
+  /**
+   * Envía una notificación cuando se desbloquea un logro
+   */
+  async sendAchievementNotification(userId, guildId, achievement, tier, fallbackChannelId = null) {
+    try {
+      // Verificar si las notificaciones están habilitadas
+      if (!achievement.notifications?.enabled) {
+        return;
+      }
+
+      if (!this.discordClient) {
+        logger.warn('Discord client no está disponible para enviar notificación de logro');
+        return;
+      }
+
+      const guild = await this.discordClient.guilds.fetch(guildId).catch(() => null);
+      if (!guild) {
+        logger.warn(`Guild ${guildId} no encontrado`);
+        return;
+      }
+
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        logger.warn(`Member ${userId} no encontrado en guild ${guildId}`);
+        return;
+      }
+
+      // Determinar canal de notificación
+      let notificationChannelId = achievement.notifications.channelId || fallbackChannelId;
+      
+      if (!notificationChannelId) {
+        logger.warn('No hay canal configurado para notificaciones de logros');
+        return;
+      }
+
+      const channel = await guild.channels.fetch(notificationChannelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) {
+        logger.warn(`Canal ${notificationChannelId} no encontrado o no es de texto`);
+        return;
+      }
+
+      // Preparar mensaje con variables reemplazadas
+      let message = achievement.notifications.message || '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!';
+      
+      message = message
+        .replace(/{mention}/g, `<@${userId}>`)
+        .replace(/{username}/g, member.user.username)
+        .replace(/{achievement}/g, achievement.name)
+        .replace(/{tier}/g, `${tier.emoji || '🏆'} ${tier.title}`)
+        .replace(/{tierTitle}/g, tier.title)
+        .replace(/{emoji}/g, tier.emoji || '🏆')
+        .replace(/{icon}/g, achievement.icon || '🎯');
+
+      // Enviar el mensaje
+      await channel.send({
+        content: message,
+        allowedMentions: { users: [userId] }
+      });
+
+      logger.info(`✅ Notificación de logro enviada a ${member.user.tag} en ${channel.name}`);
+    } catch (error) {
+      logger.error('Error enviando notificación de logro:', error);
+    }
+  }
+
+  /**
+   * Asigna un rol de recompensa al usuario
+   */
+  async assignRewardRole(userId, guildId, roleId) {
+    try {
+      if (!this.discordClient) return;
+
+      const guild = await this.discordClient.guilds.fetch(guildId).catch(() => null);
+      if (!guild) return;
+
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) return;
+
+      const role = await guild.roles.fetch(roleId).catch(() => null);
+      if (!role) {
+        logger.warn(`Rol de recompensa ${roleId} no encontrado`);
+        return;
+      }
+
+      // Verificar permisos
+      if (!guild.members.me.permissions.has('ManageRoles')) {
+        logger.warn('Bot sin permiso ManageRoles');
+        return;
+      }
+
+      if (guild.members.me.roles.highest.comparePositionTo(role) <= 0) {
+        logger.warn(`Bot no puede gestionar rol ${role.name} (jerarquía)`);
+        return;
+      }
+
+      // Asignar el rol
+      if (!member.roles.cache.has(roleId)) {
+        await member.roles.add(roleId, 'Recompensa de logro');
+        logger.info(`✅ Rol ${role.name} asignado a ${member.user.tag}`);
+      }
+    } catch (error) {
+      logger.error('Error asignando rol de recompensa:', error);
     }
   }
 
@@ -224,7 +352,6 @@ class AchievementService {
         const current = Math.min(currentValue, nextTier.target) - prevTarget;
         tierProgress = Math.floor((current / range) * 100);
       } else if (sortedTiers.length > 0) {
-        // Todos los tiers completados
         tierProgress = 100;
       }
 

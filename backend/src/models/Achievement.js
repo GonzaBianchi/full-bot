@@ -2,12 +2,12 @@ import mongoose from 'mongoose';
 
 // Esquema para cada tier/nivel de un logro
 const AchievementTierSchema = new mongoose.Schema({
-  tier: { type: Number, required: true }, // 1, 2, 3, etc.
-  title: { type: String, required: true }, // "Novato", "Experto", etc.
+  tier: { type: Number, required: true },
+  title: { type: String, required: true },
   description: { type: String, default: '' },
-  target: { type: Number, required: true }, // Meta: 100, 1000, 10000, etc.
-  rewardRoleId: { type: String, default: null }, // Rol que se otorga al completar
-  emoji: { type: String, default: '🏆' } // Emoji visual
+  target: { type: Number, required: true },
+  rewardRoleId: { type: String, default: null },
+  emoji: { type: String, default: '🏆' }
 });
 
 // Esquema principal de logros configurables
@@ -23,9 +23,9 @@ const AchievementSchema = new mongoose.Schema({
   },
   
   // Información básica
-  name: { type: String, required: true }, // "Mensajero", "Reaccionador", etc.
+  name: { type: String, required: true },
   description: { type: String, default: '' },
-  icon: { type: String, default: '🎯' }, // Emoji o URL de imagen
+  icon: { type: String, default: '🎯' },
   
   // Niveles/tiers del logro
   tiers: [AchievementTierSchema],
@@ -34,7 +34,16 @@ const AchievementSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: true },
   
   // Configuración específica para logro de boost
-  boostRoleId: { type: String, default: null }, // ID del rol de booster
+  boostRoleId: { type: String, default: null },
+  
+  // ========== NUEVO: Configuración de notificaciones ==========
+  notifications: {
+    enabled: { type: Boolean, default: true },
+    channelId: { type: String, default: null }, // null = mismo canal donde se desbloqueó
+    message: { type: String, default: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!' }
+    // Variables: {mention}, {username}, {achievement}, {tier}, {tierTitle}, {emoji}
+  },
+  // ============================================================
   
   // Metadata
   createdAt: { type: Date, default: Date.now },

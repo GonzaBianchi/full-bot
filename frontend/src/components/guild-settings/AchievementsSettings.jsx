@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useAchievements } from '../../hooks/useAchievements';
-import { Trophy, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, TrendingUp, Award } from 'lucide-react';
+import { Trophy, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Award, Bell, Hash } from 'lucide-react';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 
-export function AchievementsSettings({ guildId, roles }) {
+export function AchievementsSettings({ guildId, roles, channels }) {
   const {
     achievements,
     loading,
@@ -119,6 +119,7 @@ export function AchievementsSettings({ guildId, roles }) {
               onDelete={() => handleDelete(achievement._id, achievement.name)}
               onToggle={() => toggleAchievement(achievement._id)}
               roles={roles}
+              channels={channels}
             />
           ))}
         </div>
@@ -130,6 +131,7 @@ export function AchievementsSettings({ guildId, roles }) {
           achievement={editingAchievement}
           guildId={guildId}
           roles={roles}
+          channels={channels}
           achievementTypes={achievementTypes}
           onClose={() => {
             setShowModal(false);
@@ -144,8 +146,13 @@ export function AchievementsSettings({ guildId, roles }) {
 }
 
 // Componente individual de logro
-function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, roles }) {
+function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, roles, channels }) {
   const [expanded, setExpanded] = useState(false);
+
+  const getChannelName = (channelId) => {
+    const channel = channels.find(c => c.id === channelId);
+    return channel ? `# ${channel.name}` : 'Mismo canal';
+  };
 
   return (
     <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50">
@@ -165,6 +172,23 @@ function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, ro
               )}
             </div>
             <p className="text-gray-400 text-sm mb-3">{achievement.description}</p>
+            
+            {/* Notificaciones info */}
+            {achievement.notifications && (
+              <div className="mb-3 flex items-center gap-2 text-sm">
+                <Bell className={`w-4 h-4 ${achievement.notifications.enabled ? 'text-green-400' : 'text-gray-500'}`} />
+                <span className={achievement.notifications.enabled ? 'text-green-400' : 'text-gray-500'}>
+                  {achievement.notifications.enabled ? 'Notificaciones: ' : 'Sin notificaciones'}
+                </span>
+                {achievement.notifications.enabled && (
+                  <span className="text-gray-400">
+                    {achievement.notifications.channelId 
+                      ? getChannelName(achievement.notifications.channelId)
+                      : 'Mismo canal'}
+                  </span>
+                )}
+              </div>
+            )}
             
             {/* Tiers preview */}
             <div className="flex flex-wrap gap-2">
@@ -233,7 +257,7 @@ function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, ro
 }
 
 // Modal de creación/edición
-function AchievementModal({ achievement, guildId, roles, achievementTypes, onClose, onCreate, onUpdate }) {
+function AchievementModal({ achievement, guildId, roles, channels, achievementTypes, onClose, onCreate, onUpdate }) {
   const isEditing = !!achievement;
 
   const [formData, setFormData] = useState({
@@ -243,7 +267,14 @@ function AchievementModal({ achievement, guildId, roles, achievementTypes, onClo
     icon: achievement?.icon || '🏆',
     tiers: achievement?.tiers || [{ tier: 1, title: '', target: 100, emoji: '🥉', description: '', rewardRoleId: '' }],
     boostRoleId: achievement?.boostRoleId || '',
-    enabled: achievement?.enabled !== undefined ? achievement.enabled : true
+    enabled: achievement?.enabled !== undefined ? achievement.enabled : true,
+    // ========== NUEVO: Campos de notificaciones ==========
+    notifications: {
+      enabled: achievement?.notifications?.enabled !== undefined ? achievement.notifications.enabled : true,
+      channelId: achievement?.notifications?.channelId || '',
+      message: achievement?.notifications?.message || '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+    }
+    // ====================================================
   });
 
   const [saving, setSaving] = useState(false);
@@ -262,7 +293,6 @@ function AchievementModal({ achievement, guildId, roles, achievementTypes, onClo
       return;
     }
 
-    // Validar que todos los tiers tengan título y target
     for (const tier of formData.tiers) {
       if (!tier.title.trim()) {
         alert(`El tier ${tier.tier} necesita un título`);
@@ -274,7 +304,6 @@ function AchievementModal({ achievement, guildId, roles, achievementTypes, onClo
       }
     }
 
-    // Si es boost, validar rol
     if (formData.type === 'boost' && !formData.boostRoleId) {
       alert('Los logros de tipo Boost requieren seleccionar el rol de booster');
       return;
@@ -283,7 +312,6 @@ function AchievementModal({ achievement, guildId, roles, achievementTypes, onClo
     try {
       setSaving(true);
       
-      // Limpiar campos vacíos de rewardRoleId
       const cleanedTiers = formData.tiers.map(tier => ({
         ...tier,
         rewardRoleId: tier.rewardRoleId || null
@@ -291,7 +319,12 @@ function AchievementModal({ achievement, guildId, roles, achievementTypes, onClo
 
       const payload = {
         ...formData,
-        tiers: cleanedTiers
+        tiers: cleanedTiers,
+        // Limpiar channelId si está vacío
+        notifications: {
+          ...formData.notifications,
+          channelId: formData.notifications.channelId || null
+        }
       };
 
       if (isEditing) {
@@ -335,7 +368,6 @@ function AchievementModal({ achievement, guildId, roles, achievementTypes, onClo
     }
     
     const newTiers = formData.tiers.filter((_, i) => i !== index);
-    // Reordenar tier numbers
     newTiers.forEach((tier, i) => {
       tier.tier = i + 1;
     });
@@ -355,7 +387,7 @@ function AchievementModal({ achievement, guildId, roles, achievementTypes, onClo
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-700">
           <h2 className="text-2xl font-bold text-white">
@@ -456,6 +488,102 @@ function AchievementModal({ achievement, guildId, roles, achievementTypes, onClo
               </p>
             </div>
           )}
+
+          {/* ========== NUEVO: Configuración de Notificaciones ========== */}
+          <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
+            <div className="flex items-center gap-2 mb-4">
+              <Bell className="w-5 h-5 text-indigo-400" />
+              <h3 className="text-lg font-semibold text-white">Notificaciones</h3>
+            </div>
+
+            {/* Habilitar notificaciones */}
+            <div className="flex items-center justify-between mb-4 p-3 bg-gray-700/50 rounded-lg">
+              <div>
+                <p className="text-white font-medium">Habilitar notificaciones</p>
+                <p className="text-gray-400 text-sm">Enviar mensaje cuando alguien desbloquea este logro</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData({
+                  ...formData,
+                  notifications: { ...formData.notifications, enabled: !formData.notifications.enabled }
+                })}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                  formData.notifications.enabled ? 'bg-indigo-600' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-lg ${
+                    formData.notifications.enabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {formData.notifications.enabled && (
+              <>
+                {/* Canal de notificaciones */}
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                    <Hash className="w-4 h-4" />
+                    Canal de notificaciones
+                  </label>
+                  <select
+                    value={formData.notifications.channelId}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      notifications: { ...formData.notifications, channelId: e.target.value }
+                    })}
+                    className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2"
+                  >
+                    <option value="">Mismo canal donde se desbloqueó</option>
+                    {channels.map(channel => (
+                      <option key={channel.id} value={channel.id}>
+                        # {channel.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Si no se selecciona, el mensaje se enviará en el mismo canal donde se desbloqueó el logro
+                  </p>
+                </div>
+
+                {/* Mensaje de notificación */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Mensaje de notificación
+                  </label>
+                  <textarea
+                    value={formData.notifications.message}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      notifications: { ...formData.notifications, message: e.target.value }
+                    })}
+                    className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2"
+                    rows={3}
+                    placeholder="🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!"
+                    maxLength={500}
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      { key: '{mention}', desc: 'Menciona al usuario' },
+                      { key: '{username}', desc: 'Nombre del usuario' },
+                      { key: '{achievement}', desc: 'Nombre del logro' },
+                      { key: '{tier}', desc: 'Tier desbloqueado (con emoji)' },
+                      { key: '{tierTitle}', desc: 'Solo título del tier' },
+                      { key: '{emoji}', desc: 'Solo emoji del tier' },
+                      { key: '{icon}', desc: 'Icono del logro' }
+                    ].map(tag => (
+                      <span key={tag.key} className="text-xs px-2 py-1 bg-gray-700 text-gray-300 rounded border border-gray-600">
+                        <span className="font-mono text-indigo-400">{tag.key}</span> - {tag.desc}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          {/* ============================================================ */}
 
           {/* Tiers */}
           <div>

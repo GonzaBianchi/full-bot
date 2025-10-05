@@ -7,6 +7,8 @@ import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
+// ========== CRUD de Achievements ==========
+
 // Listar todos los logros de un guild
 router.get('/:guildId/config/achievements', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
@@ -53,6 +55,9 @@ router.post('/:guildId/config/achievements', isAuthenticated, hasGuildPermission
   body('tiers.*.emoji').optional().isString(),
   body('boostRoleId').optional().isString(),
   body('enabled').optional().isBoolean(),
+  body('notifications.enabled').optional().isBoolean(),
+  body('notifications.channelId').optional().isString(),
+  body('notifications.message').optional().isString().isLength({ max: 500 }),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -63,9 +68,9 @@ router.post('/:guildId/config/achievements', isAuthenticated, hasGuildPermission
 ], async (req, res) => {
   try {
     const { guildId } = req.params;
-    const { type, name, description, icon, tiers, boostRoleId, enabled } = req.body;
+    const { type, name, description, icon, tiers, boostRoleId, enabled, notifications } = req.body;
 
-    // Validar que los tiers estén ordenados correctamente
+    // Validar tiers
     const sortedTiers = [...tiers].sort((a, b) => a.tier - b.tier);
     for (let i = 0; i < sortedTiers.length; i++) {
       if (sortedTiers[i].tier !== i + 1) {
@@ -76,7 +81,7 @@ router.post('/:guildId/config/achievements', isAuthenticated, hasGuildPermission
       }
     }
 
-    // Si es tipo boost, validar que haya un rol configurado
+    // Si es tipo boost, validar rol
     if (type === 'boost' && !boostRoleId) {
       return res.status(400).json({ error: 'Los logros de tipo boost requieren un boostRoleId' });
     }
@@ -89,10 +94,15 @@ router.post('/:guildId/config/achievements', isAuthenticated, hasGuildPermission
       icon: icon || getDefaultIcon(type),
       tiers: sortedTiers,
       boostRoleId: boostRoleId || null,
-      enabled: enabled !== undefined ? enabled : true
+      enabled: enabled !== undefined ? enabled : true,
+      notifications: {
+        enabled: notifications?.enabled !== undefined ? notifications.enabled : true,
+        channelId: notifications?.channelId || null,
+        message: notifications?.message || '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+      }
     });
 
-    // Si es un logro de boost, sincronizar usuarios existentes con el rol
+    // Si es un logro de boost, sincronizar usuarios existentes
     if (type === 'boost' && boostRoleId) {
       const guild = req.guild || await req.discordClient.guilds.fetch(guildId).catch(() => null);
       if (guild) {
@@ -126,6 +136,9 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
   body('tiers.*.emoji').optional().isString(),
   body('boostRoleId').optional().isString(),
   body('enabled').optional().isBoolean(),
+  body('notifications.enabled').optional().isBoolean(),
+  body('notifications.channelId').optional().isString(),
+  body('notifications.message').optional().isString().isLength({ max: 500 }),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -214,7 +227,7 @@ router.patch('/:guildId/config/achievements/:id/toggle', isAuthenticated, hasGui
   }
 });
 
-// Obtener estadísticas de un logro (cuántos usuarios lo han completado, etc.)
+// Obtener estadísticas de un logro
 router.get('/:guildId/config/achievements/:id/stats', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId, id } = req.params;
@@ -226,7 +239,6 @@ router.get('/:guildId/config/achievements/:id/stats', isAuthenticated, hasGuildP
 
     const UserAchievement = (await import('../../models/UserAchievement.js')).default;
     
-    // Obtener todos los usuarios que tienen progreso en este logro
     const users = await UserAchievement.find({
       guildId,
       'achievements.achievementId': achievement._id
@@ -237,7 +249,6 @@ router.get('/:guildId/config/achievements/:id/stats', isAuthenticated, hasGuildP
       tierStats: []
     };
 
-    // Estadísticas por tier
     for (const tier of achievement.tiers.sort((a, b) => a.tier - b.tier)) {
       const unlockedCount = users.filter(user => {
         const progress = user.achievements.find(
@@ -267,7 +278,6 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
   try {
     const { guildId } = req.params;
 
-    // Verificar que no existan logros ya
     const existing = await Achievement.countDocuments({ guildId });
     if (existing > 0) {
       return res.status(400).json({ error: 'Ya existen logros configurados para este servidor' });
@@ -287,7 +297,12 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
           { tier: 4, title: 'Leyenda', target: 5000, emoji: '💎', description: 'Eres una leyenda' },
           { tier: 5, title: 'Inmortal', target: 10000, emoji: '👑', description: 'No hay quien te pare' }
         ],
-        enabled: true
+        enabled: true,
+        notifications: {
+          enabled: true,
+          channelId: null,
+          message: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+        }
       },
       {
         guildId,
@@ -301,7 +316,12 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
           { tier: 3, title: 'Celebridad', target: 1000, emoji: '✨', description: 'Una estrella brillante' },
           { tier: 4, title: 'Icono', target: 2500, emoji: '💫', description: 'Todo un icono' }
         ],
-        enabled: true
+        enabled: true,
+        notifications: {
+          enabled: true,
+          channelId: null,
+          message: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+        }
       },
       {
         guildId,
@@ -310,13 +330,18 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
         description: 'Pasa tiempo en canales de voz',
         icon: '🎙️',
         tiers: [
-          { tier: 1, title: 'Oyente', target: 3600, emoji: '🎧', description: '1 hora en voice' }, // 1 hour
-          { tier: 2, title: 'Conversador', target: 18000, emoji: '🎤', description: '5 horas en voice' }, // 5 hours
-          { tier: 3, title: 'Locutor', target: 36000, emoji: '📻', description: '10 horas en voice' }, // 10 hours
-          { tier: 4, title: 'Animador', target: 108000, emoji: '🎬', description: '30 horas en voice' }, // 30 hours
-          { tier: 5, title: 'Presentador', target: 360000, emoji: '🎭', description: '100 horas en voice' } // 100 hours
+          { tier: 1, title: 'Oyente', target: 3600, emoji: '🎧', description: '1 hora en voice' },
+          { tier: 2, title: 'Conversador', target: 18000, emoji: '🎤', description: '5 horas en voice' },
+          { tier: 3, title: 'Locutor', target: 36000, emoji: '📻', description: '10 horas en voice' },
+          { tier: 4, title: 'Animador', target: 108000, emoji: '🎬', description: '30 horas en voice' },
+          { tier: 5, title: 'Presentador', target: 360000, emoji: '🎭', description: '100 horas en voice' }
         ],
-        enabled: true
+        enabled: true,
+        notifications: {
+          enabled: true,
+          channelId: null,
+          message: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+        }
       }
     ];
 

@@ -15,6 +15,7 @@ import { LeaderboardSection } from '../components/guild-settings/LeaderboardSect
 import RoleMenus from './RoleMenus';
 import { useAutoRoles } from '../hooks/useAutoRoles';
 import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSettings';
+import { AchievementsSettings } from '../components/guild-settings/AchievementsSettings';
 
 function GuildSettings() {
   const { guildId } = useParams();
@@ -36,6 +37,7 @@ function GuildSettings() {
     roles: roleSettings.hasChanges,
     'auto-roles': autoRolesSettings.hasChanges, // ← NUEVO
     'role-menus': false,
+    achievements: false,
     leaderboard: false
   };
 
@@ -92,6 +94,14 @@ function GuildSettings() {
                 config={config} 
                 channels={channels}
                 roles={roles} 
+              />
+            )}
+
+            {activeSection === 'achievements' && (
+              <AchievementsSettings 
+                guildId={guildId} 
+                roles={roles}
+                channels={channels}
               />
             )}
 
