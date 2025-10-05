@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Users, Settings, TrendingUp, Shield, ExternalLink } from 'lucide-react';
 import { authService, guildService } from '../services/api';
+import { Link } from 'react-router-dom';
 
 function Home() {
   const [botInfo, setBotInfo] = useState(null);
