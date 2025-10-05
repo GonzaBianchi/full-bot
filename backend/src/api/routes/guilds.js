@@ -6,12 +6,14 @@ import { body, param, validationResult } from 'express-validator';
 import UserModel from '../../models/User.js';
 import roleMenusRoutes from './roleMenus.js';
 import autoRolesRoutes from './autoRoles.js';
+import achievementsRoutes from './achievements.js';
 
 const router = express.Router();
 
-// Montar las rutas de role menus y auto-roles (importante: antes de las rutas con :guildId)
+// Montar las rutas de role menus, auto-roles y achievements (importante: antes de las rutas con :guildId)
 router.use('/', roleMenusRoutes);
 router.use('/', autoRolesRoutes);
+router.use('/', achievementsRoutes);
 
 // Obtener configuración de un guild
 router.get('/:guildId/config', isAuthenticated, hasGuildPermission, async (req, res) => {
