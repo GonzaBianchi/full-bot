@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { leaderboardService } from '../services/api';
+import { leaderboardService, guildService } from '../services/api';
 import { Trophy, Medal, Award, ArrowLeft, ChevronLeft, ChevronRight, Home } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 function Leaderboard() {
   const { guildId } = useParams();
@@ -12,6 +13,7 @@ function Leaderboard() {
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page')) || 1);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [guildInfo, setGuildInfo] = useState(null);
 
   useEffect(() => {
     loadLeaderboard(currentPage);
@@ -34,8 +36,18 @@ function Leaderboard() {
         setPagination(response.data.pagination);
         setIsAuthenticated(false);
       }
+
+      // Fetch public guild info (name + icon)
+      const infoRes = await guildService.getPublicInfo(guildId).catch((err) => {
+        console.warn('Failed to load guild info', err);
+        return null;
+      });
+      if (infoRes && infoRes.data) {
+        setGuildInfo(infoRes.data);
+      }
     } catch (error) {
       console.error('Error al cargar leaderboard:', error);
+      toast.error('Error cargando leaderboard');
     } finally {
       setLoading(false);
     }
@@ -87,15 +99,15 @@ function Leaderboard() {
               className="flex items-center space-x-2 text-indigo-400 hover:text-indigo-300 transition-colors group"
             >
               {isAuthenticated ? (
-                <>
+                <div className="flex items-center space-x-2 hover:cursor-pointer hover:scale-105 transition-all">
                   <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                   <span>Volver al Dashboard</span>
-                </>
+                </div>
               ) : (
-                <>
+                <div className="flex items-center space-x-2 hover:cursor-pointer hover:scale-105 transition-all">
                   <Home className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   <span>Ir al Inicio</span>
-                </>
+                </div>
               )}
             </button>
 
@@ -116,7 +128,7 @@ function Leaderboard() {
               </div>
               <div className="flex-1">
                 <h1 className="text-3xl font-bold text-white mb-1">
-                  🏆 Leaderboard del Servidor
+                  🏆 Leaderboard del Servidor 
                 </h1>
                 <p className="text-gray-400">
                   Top {pagination?.totalUsers || 0} usuarios más activos
@@ -125,6 +137,26 @@ function Leaderboard() {
             </div>
           </div>
         </div>
+
+        {/* Guild Info (Newly Added) */}
+        {guildInfo && (
+          <div className="mb-8 p-4 bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50">
+            <div className="flex items-center space-x-4">
+              {guildInfo.iconURL ? (
+                <img src={guildInfo.iconURL} alt={guildInfo.name} className="w-12 h-12 rounded-full border-2 border-gray-700" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center">
+                  <span className="text-gray-400 text-xl font-bold">{guildInfo.name?.charAt(0)}</span>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold truncate">
+                  {guildInfo.name}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Leaderboard Cards (Mobile-friendly) */}
         <div className="space-y-3">
@@ -137,7 +169,7 @@ function Leaderboard() {
             >
               <div className="flex items-center space-x-4">
                 {/* Rank Badge */}
-                <div className={`flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center ${getRankColor(user.rank)}`}>
+                <div className={`p-2 flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center ${getRankColor(user.rank)}`}>
                   <div className="text-center">
                     <div className="flex items-center justify-center mb-0.5">
                       {getRankIcon(user.rank)}

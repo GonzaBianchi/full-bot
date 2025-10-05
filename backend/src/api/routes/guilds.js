@@ -237,4 +237,22 @@ router.get('/bot/info', async (req, res) => {
   }
 });
 
+// Public endpoint: obtener información básica del servidor (nombre, icono)
+router.get('/public/:guildId/info', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const guild = req.discordClient ? await req.discordClient.guilds.fetch(guildId).catch(() => null) : null;
+    if (!guild) return res.status(404).json({ error: 'El bot no está en este servidor o no se pudo obtener la información' });
+
+    return res.json({
+      id: guild.id,
+      name: guild.name,
+      iconURL: guild.icon ? guild.iconURL({ dynamic: true, size: 128 }) : null
+    });
+  } catch (e) {
+    logger.error('Error al obtener public guild info:', e);
+    res.status(500).json({ error: 'Error al obtener información del servidor' });
+  }
+});
+
 export default router;
