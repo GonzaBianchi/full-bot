@@ -106,8 +106,16 @@ class BotApp {
           // ready event ya es manejado por listener once, pero mantenemos import por si tiene lógica adicional
           // no volveremos a registrar readyHandler.execute para evitar duplicados
         }
+
+        // IMPORTANTE: Registrar handler de interacciones (comandos slash)
+        const interactionHandler = (await import('./events/interactionCreate.js')).default;
+        if (interactionHandler && interactionHandler.name) {
+          this.client.on(interactionHandler.name, (...args) => interactionHandler.execute(...args));
+          logger.info('✅ Handler de interacciones registrado');
+        }
       } catch (e) {
         logger.warn('No se pudieron registrar algunos handlers:', e.message);
+        logger.error('Stack:', e.stack);
       }
 
       // Register slash commands
@@ -115,10 +123,13 @@ class BotApp {
         const clientId = process.env.DISCORD_CLIENT_ID;
         const token = process.env.DISCORD_TOKEN;
         const devGuild = process.env.DEV_GUILD_ID || null;
+        
+        logger.info('Iniciando registro de comandos slash...');
         await registerCommands(clientId, token, devGuild);
-        logger.info('Slash commands registrados');
+        logger.info('✅ Slash commands registrados exitosamente');
       } catch (e) {
-        logger.warn('Error registrando slash commands:', e.message);
+        logger.error('❌ Error registrando slash commands:', e.message);
+        logger.error('Stack:', e.stack);
       }
 
       await this.api.start(port);
