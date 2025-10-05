@@ -245,7 +245,7 @@ router.post('/:guildId/role-menus/:id/publish', isAuthenticated, hasGuildPermiss
 
     // Construir descripción del embed con los roles
     let description = 'Reacciona con los emojis para obtener o quitar roles\n\n';
-    
+
     for (const opt of menu.options) {
       // Determinar el emoji display
       let emojiDisplay = opt.emojiIdentifier;
@@ -264,11 +264,11 @@ router.post('/:guildId/role-menus/:id/publish', isAuthenticated, hasGuildPermiss
       // Usar mención de rol: <@&roleId>
       const roleMention = `<@&${opt.roleId}>`;
       
-      // Si hay label, usarlo; si no, solo mostrar emoji y rol
+      // Si hay label, usarlo; si no, solo mostrar emoji y rol con guion medio y espacios
       if (opt.label && opt.label.trim()) {
-        description += `${emojiDisplay} ${roleMention} - ${opt.label}\n`;
+        description += `${emojiDisplay}  —  ${roleMention}  —  ${opt.label}\n`;
       } else {
-        description += `${emojiDisplay} ${roleMention}\n`;
+        description += `${emojiDisplay}  —  ${roleMention}\n`;
       }
     }
 

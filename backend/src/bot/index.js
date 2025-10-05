@@ -350,7 +350,7 @@ class BotApp {
           return;
         }
 
-        // CRÍTICO: Verificar si el usuario tiene el rol ANTES de intentar removerlo
+        // Verificar si el usuario tiene el rol ANTES de intentar removerlo
         if (!member.roles.cache.has(role.id)) {
           logger.debug(`Usuario ${user.tag} no tiene el rol ${role.name}, no se puede remover`);
           return;

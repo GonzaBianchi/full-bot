@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { roleMenuService, guildService } from '../services/api';
-import { Plus, Trash2, Edit, Send, AlertCircle, Shield, Hash, Smile, X, Save, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, Edit, Send, AlertCircle, Shield, Hash, Smile, X, Save, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 function RoleMenus() {
@@ -9,6 +9,8 @@ function RoleMenus() {
   const [menus, setMenus] = useState([]);
   const [resources, setResources] = useState({ channels: [], roles: [], emojis: [] });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(null);
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ 
@@ -93,13 +95,13 @@ function RoleMenus() {
       return;
     }
 
-    // Validar que todas las opciones tengan emoji y rol
     const invalidOptions = form.options.filter(opt => !opt.emojiIdentifier || !opt.roleId);
     if (invalidOptions.length > 0) {
       toast.error('Todas las opciones deben tener un emoji y un rol');
       return;
     }
 
+    setSaving(true);
     try {
       if (editing) {
         await roleMenuService.update(guildId, editing._id, form);
@@ -113,6 +115,8 @@ function RoleMenus() {
     } catch (e) { 
       console.error(e); 
       toast.error('❌ Error guardando el menú'); 
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -122,6 +126,7 @@ function RoleMenus() {
       return;
     }
 
+    setPublishing(menu._id);
     try {
       await roleMenuService.publish(guildId, menu._id);
       toast.success('✅ Menú publicado en el canal');
@@ -129,6 +134,8 @@ function RoleMenus() {
     } catch (e) { 
       console.error(e); 
       toast.error('❌ Error publicando el menú'); 
+    } finally {
+      setPublishing(null);
     }
   };
 
@@ -147,7 +154,6 @@ function RoleMenus() {
     const newOptions = [...form.options];
     
     if (field === 'emojiIdentifier') {
-      // Extraer emojiId si es un emoji custom (formato: "name:id")
       const parts = value.split(':');
       if (parts.length === 2 && /^\d+$/.test(parts[1])) {
         newOptions[index].emojiId = parts[1];
@@ -178,13 +184,11 @@ function RoleMenus() {
 
   const getEmojiDisplay = (emojiIdentifier) => {
     const emoji = resources.emojis.find(e => e.identifier === emojiIdentifier);
-    if (emoji) {
-      // Si es un emoji custom con ID, retornar la URL de la imagen
-      if (emoji.id) {
-        return emoji.url;
-      }
+    if (emoji && emoji.id) {
+      // Retornar URL de Discord CDN para emojis custom
+      return `https://cdn.discordapp.com/emojis/${emoji.id}.${emoji.animated ? 'gif' : 'png'}`;
     }
-    // Si es unicode, devolver el carácter directamente
+    // Para emojis unicode, retornar el carácter
     return emojiIdentifier.split(':')[0] || emojiIdentifier;
   };
 
@@ -215,7 +219,7 @@ function RoleMenus() {
         {!showForm && (
           <button 
             onClick={startNew} 
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors flex items-center space-x-2"
+            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors flex items-center space-x-2 cursor-pointer"
           >
             <Plus className="w-5 h-5" />
             <span>Crear Menú</span>
@@ -234,12 +238,13 @@ function RoleMenus() {
               <li>• Puedes agregar hasta {MAX_OPTIONS} roles por menú (límite de Discord)</li>
               <li>• El modo exclusivo permite que solo se pueda tener un rol del menú a la vez</li>
               <li>• Los emojis pueden ser del servidor o emojis unicode estándar</li>
+              <li>• <strong>Para quitar roles en modo exclusivo, simplemente quita tu reacción</strong></li>
             </ul>
           </div>
         </div>
       </div>
 
-      {/* Formulario de creación/edición */}
+      {/* Formulario */}
       {showForm ? (
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 space-y-6">
           <div className="flex items-center justify-between">
@@ -248,7 +253,7 @@ function RoleMenus() {
             </h2>
             <button
               onClick={cancelEdit}
-              className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-700 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-5 h-5 text-gray-400" />
             </button>
@@ -264,7 +269,7 @@ function RoleMenus() {
               onChange={e => setForm({...form, title: e.target.value})} 
               placeholder="Ej: Selecciona tus roles"
               maxLength={100}
-              className="w-full px-4 py-3 bg-gray-700/50 border-2 border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" 
+              className="w-full px-4 py-3 bg-gray-700/50 border-2 border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all cursor-text" 
             />
           </div>
 
@@ -302,7 +307,7 @@ function RoleMenus() {
             </div>
             <button
               onClick={() => setForm({...form, exclusive: !form.exclusive})}
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors cursor-pointer ${
                 form.exclusive ? 'bg-indigo-600' : 'bg-gray-600'
               }`}
             >
@@ -326,7 +331,7 @@ function RoleMenus() {
               <button 
                 onClick={addOption}
                 disabled={form.options.length >= MAX_OPTIONS}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center space-x-2"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center space-x-2 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Agregar Opción</span>
@@ -347,7 +352,7 @@ function RoleMenus() {
                       <span className="text-sm font-medium text-gray-300">Opción {idx + 1}</span>
                       <button 
                         onClick={() => removeOption(idx)} 
-                        className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                        className="p-2 hover:bg-red-500/20 rounded-lg transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4 text-red-400" />
                       </button>
@@ -365,7 +370,6 @@ function RoleMenus() {
                           >
                             <option value="">Seleccionar emoji...</option>
                             {resources.emojis.map(em => {
-                              // Para mostrar el emoji en el option (limitado en HTML)
                               const displayText = em.id 
                                 ? `${em.name} ${em.animated ? '(anim)' : '(custom)'}`
                                 : `${em.identifier} ${em.name}`;
@@ -382,7 +386,8 @@ function RoleMenus() {
                               {(() => {
                                 const selectedEmoji = resources.emojis.find(e => e.identifier === opt.emojiIdentifier);
                                 if (selectedEmoji && selectedEmoji.id) {
-                                  return <img src={selectedEmoji.url} alt="emoji" className="w-5 h-5 mr-2" />;
+                                  const emojiUrl = `https://cdn.discordapp.com/emojis/${selectedEmoji.id}.${selectedEmoji.animated ? 'gif' : 'png'}`;
+                                  return <img src={emojiUrl} alt="emoji" className="w-5 h-5 mr-2" />;
                                 } else if (selectedEmoji) {
                                   return <span className="text-lg mr-2">{selectedEmoji.identifier}</span>;
                                 }
@@ -427,7 +432,7 @@ function RoleMenus() {
                         onChange={e => updateOption(idx, 'label', e.target.value)} 
                         placeholder="Descripción breve del rol"
                         maxLength={100}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" 
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm cursor-text" 
                       />
                     </div>
                   </div>
@@ -440,17 +445,26 @@ function RoleMenus() {
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-700">
             <button
               onClick={cancelEdit}
-              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors cursor-pointer"
             >
               Cancelar
             </button>
             <button
               onClick={save}
-              disabled={!form.title || !form.channelId || form.options.length === 0}
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center space-x-2"
+              disabled={!form.title || !form.channelId || form.options.length === 0 || saving}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center space-x-2 cursor-pointer"
             >
-              <Save className="w-5 h-5" />
-              <span>{editing ? 'Actualizar' : 'Crear'} Menú</span>
+              {saving ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  <span>{editing ? 'Actualizar' : 'Crear'} Menú</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -464,7 +478,7 @@ function RoleMenus() {
               <p className="text-gray-400 mb-6">Crea tu primer menú de roles para empezar</p>
               <button 
                 onClick={startNew} 
-                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors inline-flex items-center space-x-2"
+                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors inline-flex items-center space-x-2 cursor-pointer"
               >
                 <Plus className="w-5 h-5" />
                 <span>Crear Primer Menú</span>
@@ -505,23 +519,33 @@ function RoleMenus() {
                       {!m.published && (
                         <button 
                           onClick={() => publish(m)} 
-                          className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors flex items-center space-x-2"
+                          disabled={publishing === m._id}
+                          className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white rounded-lg transition-colors flex items-center space-x-2 cursor-pointer disabled:cursor-not-allowed"
                           title="Publicar menú en el canal"
                         >
-                          <Send className="w-4 h-4" />
-                          <span>Publicar</span>
+                          {publishing === m._id ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Publicando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="w-4 h-4" />
+                              <span>Publicar</span>
+                            </>
+                          )}
                         </button>
                       )}
                       <button 
                         onClick={() => edit(m)} 
-                        className="p-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg transition-colors"
+                        className="p-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg transition-colors cursor-pointer"
                         title="Editar menú"
                       >
                         <Edit className="w-5 h-5" />
                       </button>
                       <button 
                         onClick={() => remove(m._id)} 
-                        className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
+                        className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors cursor-pointer"
                         title="Eliminar menú"
                       >
                         <Trash2 className="w-5 h-5" />
@@ -540,14 +564,18 @@ function RoleMenus() {
                         return (
                           <div key={idx} className="flex items-center space-x-3 text-sm">
                             {isCustom ? (
-                              <img src={emojiDisplay} alt="emoji" className="w-5 h-5" />
+                              <img 
+                                src={emojiDisplay} 
+                                alt="emoji" 
+                                className="w-6 h-6" 
+                              />
                             ) : (
                               <span className="text-xl">{emojiDisplay}</span>
                             )}
                             <span className="text-gray-400">—</span>
                             <span className="text-indigo-400 font-medium">@{getRoleName(opt.roleId)}</span>
                             {opt.label && (
-                              <span className="text-gray-400 text-xs">- {opt.label}</span>
+                              <span className="text-gray-400 text-xs">— {opt.label}</span>
                             )}
                           </div>
                         );
