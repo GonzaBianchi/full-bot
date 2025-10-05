@@ -195,7 +195,7 @@ function Home() {
                           </a>
                         ) : (
                           <a 
-                            href={mockAuthService.login(`/guild/${g.id}`)}
+                            href={authService.login(`/guild/${g.id}`)}
                             className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm font-medium transition-colors"
                           >
                             Iniciar sesión
@@ -260,7 +260,7 @@ function Home() {
                           </a>
                         ) : (
                           <a 
-                            href={mockAuthService.login('/')}
+                            href={authService.login('/')}
                             className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm font-medium transition-colors"
                           >
                             Iniciar sesión
