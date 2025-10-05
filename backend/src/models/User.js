@@ -54,4 +54,7 @@ UserSchema.statics.addXp = async function(guildId, userId, amount) {
   return { user, leveledUp: newLevel > oldLevel, oldLevel, newLevel };
 };
 
+UserSchema.index({ guildId: 1, userId: 1 }, { unique: true });
+UserSchema.index({ guildId: 1, totalXp: -1 }); // Para optimizar rankings
+
 export default mongoose.models.User || mongoose.model('User', UserSchema);
