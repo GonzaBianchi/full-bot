@@ -247,7 +247,7 @@ function GuildSettings() {
           <div className="p-6">
             <button
               onClick={() => navigate('/')}
-              className="flex items-center space-x-2 text-gray-400 hover:text-white mb-8 group cursor-pointer hover:scale-50 transition-all"
+              className="flex items-center space-x-2 text-gray-400 hover:text-white mb-8 group cursor-pointer hover:scale-105 transition-all"
             >
               <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
               <span>Volver</span>
@@ -273,7 +273,7 @@ function GuildSettings() {
                         : 'text-gray-400 hover:bg-gray-700/50 hover:text-white'
                     }`}
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3 hover:cursor-pointer">
                       <Icon className="w-5 h-5" />
                       <span className="font-medium">{item.label}</span>
                     </div>
