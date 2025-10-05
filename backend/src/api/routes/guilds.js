@@ -8,6 +8,9 @@ import roleMenusRoutes from './roleMenus.js';
 
 const router = express.Router();
 
+// Montar las rutas de role menus (importante: antes de las rutas con :guildId)
+router.use('/', roleMenusRoutes);
+
 // Obtener configuración de un guild
 router.get('/:guildId/config', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
@@ -117,7 +120,7 @@ router.post('/:guildId/config/level-roles', isAuthenticated, hasGuildPermission,
   }
 });
 
-// Obtener canales y roles del servidor (útil para popular selects en el panel)
+// Obtener canales, roles y emojis del servidor (útil para popular selects en el panel)
 router.get('/:guildId/resources', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId } = req.params;
@@ -131,7 +134,8 @@ router.get('/:guildId/resources', isAuthenticated, hasGuildPermission, async (re
       const channelCollection = guild.channels.cache || new Map();
       channels = Array.from(channelCollection.values())
         .filter(ch => ch && typeof ch.type !== 'undefined' && ch.isTextBased && ch.isTextBased())
-        .map(ch => ({ id: ch.id, name: ch.name, type: ch.type }));
+        .map(ch => ({ id: ch.id, name: ch.name, type: ch.type }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     } catch (e) {
       logger.warn('No se pudieron listar canales desde cache:', e.message);
     }
@@ -142,7 +146,8 @@ router.get('/:guildId/resources', isAuthenticated, hasGuildPermission, async (re
       const rolesCollection = guild.roles.cache || new Map();
       roles = Array.from(rolesCollection.values())
         .filter(r => r && r.id !== guild.id)
-        .map(r => ({ id: r.id, name: r.name }));
+        .map(r => ({ id: r.id, name: r.name, color: r.hexColor }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     } catch (e) {
       logger.warn('No se pudieron listar roles desde cache:', e.message);
     }
@@ -157,9 +162,26 @@ router.get('/:guildId/resources', isAuthenticated, hasGuildPermission, async (re
         animated: !!e.animated,
         // identifier usable para construir custom emoji: "name:id". Para unicode usar name.
         identifier: e.id ? `${e.name}:${e.id}` : e.name,
-        // mention representa cómo se vería en un mensaje (<:name:id> o unicode char)
-        mention: e.toString()
+        // mention representa cómo se vería en un mensaje (<:name:id> o <a:name:id> para animados)
+        mention: e.toString(),
+        url: e.url
       }));
+      
+      // Agregar algunos emojis unicode comunes
+      const commonEmojis = [
+        { id: null, name: '✅', animated: false, identifier: '✅', mention: '✅' },
+        { id: null, name: '❌', animated: false, identifier: '❌', mention: '❌' },
+        { id: null, name: '⭐', animated: false, identifier: '⭐', mention: '⭐' },
+        { id: null, name: '🎮', animated: false, identifier: '🎮', mention: '🎮' },
+        { id: null, name: '🎨', animated: false, identifier: '🎨', mention: '🎨' },
+        { id: null, name: '🎵', animated: false, identifier: '🎵', mention: '🎵' },
+        { id: null, name: '📚', animated: false, identifier: '📚', mention: '📚' },
+        { id: null, name: '💬', animated: false, identifier: '💬', mention: '💬' },
+        { id: null, name: '🔔', animated: false, identifier: '🔔', mention: '🔔' },
+        { id: null, name: '🌟', animated: false, identifier: '🌟', mention: '🌟' },
+      ];
+      
+      emojis = [...commonEmojis, ...emojis];
     } catch (e) {
       logger.warn('No se pudieron listar emojis desde cache:', e.message);
     }
@@ -209,14 +231,11 @@ router.get('/bot/info', async (req, res) => {
     const guildCount = req.discordClient?.guilds?.cache?.size || 0;
 
     // Compute a more accurate user count:
-    // 1) If we have a DB with the User model, count distinct userId across guilds the bot is in.
-    // 2) Otherwise, sum guild.memberCount as a fallback.
     let userCount = 0;
     try {
       const guildIds = req.discordClient?.guilds?.cache ? Array.from(req.discordClient.guilds.cache.keys()) : [];
 
       if (guildIds.length > 0 && UserModel && UserModel.distinct) {
-        // Count unique users stored in our DB (most accurate for unique users across guilds)
         try {
           const distinct = await UserModel.distinct('userId', { guildId: { $in: guildIds } });
           if (Array.isArray(distinct) && distinct.length > 0) {
@@ -227,7 +246,7 @@ router.get('/bot/info', async (req, res) => {
         }
       }
 
-      // Fallback: sum guild.memberCount (available if GUILD_MEMBERS intent is enabled and/or Discord provides it)
+      // Fallback: sum guild.memberCount
       if (!userCount) {
         const guilds = req.discordClient.guilds.cache;
         if (guilds && guilds.size > 0) {
