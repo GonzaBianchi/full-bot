@@ -1,1 +1,8 @@
 @import "tailwindcss";
+@theme {
+  --color-discord-dark: #2c2f33;
+  --color-discord-gray: #23272a;
+  --color-discord-lightgray: #99aab5;
+  --color-discord-blurple: #5865f2;
+  --color-discord-red: #ed4245;
+}

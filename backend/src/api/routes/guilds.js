@@ -3,6 +3,7 @@ import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
 import GuildModel from '../../models/Guild.js';
 import logger from '../../utils/logger.js';
 import { body, param, validationResult } from 'express-validator';
+import UserModel from '../../models/User.js';
 
 const router = express.Router();
 
@@ -185,7 +186,51 @@ router.get('/bot/info', async (req, res) => {
   try {
     const bot = req.discordClient && req.discordClient.user;
     if (!bot) return res.status(404).json({ error: 'Bot no conectado' });
-    res.json({ id: bot.id, username: bot.username, discriminator: bot.discriminator, avatarURL: bot.displayAvatarURL({ dynamic: true }) });
+
+    // Count guilds from client's cache
+    const guildCount = req.discordClient?.guilds?.cache?.size || 0;
+
+    // Compute a more accurate user count:
+    // 1) If we have a DB with the User model, count distinct userId across guilds the bot is in.
+    // 2) Otherwise, sum guild.memberCount as a fallback.
+    let userCount = 0;
+    try {
+      const guildIds = req.discordClient?.guilds?.cache ? Array.from(req.discordClient.guilds.cache.keys()) : [];
+
+      if (guildIds.length > 0 && UserModel && UserModel.distinct) {
+        // Count unique users stored in our DB (most accurate for unique users across guilds)
+        try {
+          const distinct = await UserModel.distinct('userId', { guildId: { $in: guildIds } });
+          if (Array.isArray(distinct) && distinct.length > 0) {
+            userCount = distinct.length;
+          }
+        } catch (dbErr) {
+          logger.warn('No se pudo obtener userCount desde la DB, se usará el recuento desde caché:', dbErr.message);
+        }
+      }
+
+      // Fallback: sum guild.memberCount (available if GUILD_MEMBERS intent is enabled and/or Discord provides it)
+      if (!userCount) {
+        const guilds = req.discordClient.guilds.cache;
+        if (guilds && guilds.size > 0) {
+          userCount = Array.from(guilds.values()).reduce((acc, g) => acc + (g.memberCount || 0), 0);
+        } else {
+          userCount = req.discordClient.users?.cache?.size || 0;
+        }
+      }
+    } catch (e) {
+      logger.warn('Error calculando userCount, fallback a users.cache:', e.message);
+      userCount = req.discordClient.users?.cache?.size || 0;
+    }
+
+    res.json({
+      id: bot.id,
+      username: bot.username,
+      discriminator: bot.discriminator,
+      avatarURL: bot.displayAvatarURL({ dynamic: true }),
+      guildCount,
+      userCount
+    });
   } catch (e) {
     logger.error('Error al obtener bot info:', e);
     res.status(500).json({ error: 'Error al obtener información del bot' });
