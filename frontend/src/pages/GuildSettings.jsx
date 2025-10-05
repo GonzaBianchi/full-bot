@@ -13,6 +13,8 @@ import { NotificationSettings } from '../components/guild-settings/NotificationS
 import { RoleSettings } from '../components/guild-settings/RoleSettings';
 import { LeaderboardSection } from '../components/guild-settings/LeaderboardSection';
 import RoleMenus from './RoleMenus';
+import { useAutoRoles } from '../hooks/useAutoRoles';
+import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSettings';
 
 function GuildSettings() {
   const { guildId } = useParams();
@@ -25,12 +27,14 @@ function GuildSettings() {
   const generalSettings = useGeneralSettings(guildId, config);
   const notificationSettings = useNotificationSettings(guildId, config);
   const roleSettings = useRoleSettings(guildId, config);
+  const autoRolesSettings = useAutoRoles(guildId, config);
 
   // Mapa de cambios sin guardar por sección
   const hasChanges = {
     general: generalSettings.hasChanges,
     notifications: notificationSettings.hasChanges,
     roles: roleSettings.hasChanges,
+    'auto-roles': autoRolesSettings.hasChanges, // ← NUEVO
     'role-menus': false,
     leaderboard: false
   };
@@ -80,6 +84,15 @@ function GuildSettings() {
               <div>
                 <RoleMenus />
               </div>
+            )}
+
+            {activeSection === 'auto-roles' && (
+              <AutoRolesSettings 
+                guildId={guildId} 
+                config={config} 
+                channels={channels}
+                roles={roles} 
+              />
             )}
 
             {activeSection === 'leaderboard' && (

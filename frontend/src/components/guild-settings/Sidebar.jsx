@@ -1,5 +1,5 @@
 // frontend/src/components/guild-settings/Sidebar.jsx
-import { ArrowLeft, Settings, Bell, Award, Shield, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Settings, Bell, Award, Shield, BarChart3, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function Sidebar({ activeSection, setActiveSection, hasChanges }) {
@@ -9,6 +9,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges }) {
     { id: 'general', label: 'General', icon: Settings },
     { id: 'notifications', label: 'Notificaciones', icon: Bell },
     { id: 'roles', label: 'Roles de Nivel', icon: Award },
+    { id: 'auto-roles', label: 'Auto-Roles', icon: UserPlus },
     { id: 'role-menus', label: 'Role Menus', icon: Shield },
     { id: 'leaderboard', label: 'Leaderboard', icon: BarChart3 }
   ];

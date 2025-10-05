@@ -5,11 +5,13 @@ import logger from '../../utils/logger.js';
 import { body, param, validationResult } from 'express-validator';
 import UserModel from '../../models/User.js';
 import roleMenusRoutes from './roleMenus.js';
+import autoRolesRoutes from './autoRoles.js';
 
 const router = express.Router();
 
 // Montar las rutas de role menus (importante: antes de las rutas con :guildId)
 router.use('/', roleMenusRoutes);
+router.use('/', autoRolesRoutes);
 
 // Obtener configuración de un guild
 router.get('/:guildId/config', isAuthenticated, hasGuildPermission, async (req, res) => {
