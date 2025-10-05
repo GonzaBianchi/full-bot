@@ -24,9 +24,13 @@ export const guildService = {
   getResources: (guildId) => api.get(`/api/guilds/${guildId}/resources`),
 };
 
+// frontend/src/services/api.js - Actualización
 export const leaderboardService = {
-  getPublic: (guildId, page = 1, limit = 10) => api.get(`/api/leaderboard/public/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
-  get: (guildId, page = 1, limit = 10) => api.get(`/api/leaderboard/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
+  getPublic: (guildId, page = 1, limit = 10) => 
+    api.get(`/api/leaderboard/public/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
+  getLeaderboard: (guildId, page = 1, limit = 10) => 
+    api.get(`/api/leaderboard/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
+  get: (guildId, page = 1, limit = 10) => 
+    api.get(`/api/leaderboard/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
 };
-
 export default api;
