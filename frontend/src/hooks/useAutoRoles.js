@@ -29,7 +29,8 @@ export function useAutoRoles(guildId, config) {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const response = await api.get(`/guilds/${guildId}/config/auto-roles`);
+      // ✅ CORREGIDO: Agregar /api al path
+      const response = await api.get(`/api/guilds/${guildId}/config/auto-roles`);
       const data = response.data.autoRoles;
       setSettings(data);
       setOriginalSettings(data);
@@ -49,7 +50,8 @@ export function useAutoRoles(guildId, config) {
   const saveSettings = async () => {
     try {
       setSaving(true);
-      await api.post(`/guilds/${guildId}/config/auto-roles`, settings);
+      // ✅ CORREGIDO: Agregar /api al path
+      await api.post(`/api/guilds/${guildId}/config/auto-roles`, settings);
       setOriginalSettings(settings);
       toast.success('✅ Configuración guardada correctamente');
       return true;
