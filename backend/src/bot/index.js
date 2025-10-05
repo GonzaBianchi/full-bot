@@ -7,6 +7,7 @@ import User from '../models/User.js';
 import { xpForLevel } from './utils/levelSystem.js';
 import registerCommands from './commands/registerCommands.js';
 import RoleMenu from '../models/RoleMenu.js';
+import setupAchievementTracking from './events/achievementTracking.js';
 
 dotenv.config();
 
@@ -18,11 +19,14 @@ class BotApp {
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.GuildVoiceStates, // ← NECESARIO para voice tracking
+        GatewayIntentBits.GuildMembers // ← NECESARIO para boost tracking
       ],
       partials: [
         Partials.Channel, 
         Partials.Message, 
         Partials.Reaction,
+        Partials.GuildMember // ← NECESARIO para eventos de miembros
       ]
     });
 
@@ -114,6 +118,15 @@ class BotApp {
         logger.error('Stack:', e.stack);
       }
 
+      // ========== Configurar tracking de achievements ==========
+      try {
+        setupAchievementTracking(this.client);
+        logger.info('✅ Achievement tracking configurado');
+      } catch (e) {
+        logger.error('❌ Error configurando achievement tracking:', e);
+      }
+      // =========================================================
+
       // Register slash commands
       try {
         const clientId = process.env.DISCORD_CLIENT_ID;
@@ -128,15 +141,7 @@ class BotApp {
         logger.error('Stack:', e.stack);
       }
 
-      // Configurar partials adicionales
-      this.client.options.partials = Array.from(new Set([
-        ...(this.client.options.partials || []), 
-        'MESSAGE', 
-        'CHANNEL', 
-        'REACTION'
-      ]));
-
-      // Setup reaction handlers
+      // Setup reaction handlers para role menus
       this.setupReactionHandlers();
     });
 
@@ -340,7 +345,6 @@ class BotApp {
           return;
         }
 
-        // Verificar si el usuario tiene el rol ANTES de intentar removerlo
         if (!member.roles.cache.has(role.id)) {
           return;
         }
@@ -361,7 +365,6 @@ class BotApp {
     const port = process.env.PORT || 3000;
 
     try {
-      // 1. Conectar a MongoDB PRIMERO
       logger.info('Conectando a MongoDB...');
       await connect(process.env.MONGODB_URI);
       logger.info('✅ Conectado a MongoDB');
@@ -371,7 +374,6 @@ class BotApp {
     }
 
     try {
-      // 2. Iniciar API Server ANTES que el bot (para que Render detecte el puerto)
       logger.info(`Iniciando API Server en puerto ${port}...`);
       await this.api.start(port);
       logger.info(`✅ API Server corriendo en puerto ${port}`);
@@ -381,10 +383,8 @@ class BotApp {
     }
 
     try {
-      // 3. Finalmente, conectar el bot de Discord
       logger.info('Conectando bot de Discord...');
       await this.client.login(process.env.DISCORD_TOKEN);
-      // El evento 'ready' se disparará automáticamente
     } catch (e) {
       logger.error('❌ Error conectando bot de Discord:', e);
       process.exit(1);
