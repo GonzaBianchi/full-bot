@@ -1,11 +1,21 @@
 import express from 'express';
 import passport from 'passport';
 import logger from '../../utils/logger.js';
+import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
 
+// Simple rate limiter for auth endpoints to avoid hitting Discord token endpoint too often
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 6, // max 6 requests per minute per IP (adjust as needed)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Demasiadas solicitudes de autenticación. Intenta de nuevo en un minuto.'
+});
+
 // Ruta de login con Discord (acepta ?redirect=/guild/123)
-router.get('/login', (req, res, next) => {
+router.get('/login', authLimiter, (req, res, next) => {
   const redirect = req.query.redirect;
   if (redirect && typeof redirect === 'string') {
     // Use state to carry the redirect path (Discord will return it)
@@ -15,7 +25,7 @@ router.get('/login', (req, res, next) => {
 });
 
 // Callback de Discord OAuth
-router.get('/callback', (req, res, next) => {
+router.get('/callback', authLimiter, (req, res, next) => {
   // Log incoming query for debugging (avoid logging sensitive tokens)
   try {
     logger.info('OAuth callback query:', { ...req.query });
@@ -30,6 +40,9 @@ router.get('/callback', (req, res, next) => {
         try {
           logger.error('OAuth oauthError.statusCode:', err.oauthError.statusCode);
           logger.error('OAuth oauthError.data:', String(err.oauthError.data));
+          if (err.oauthError.headers) {
+            try { logger.error('OAuth oauthError.headers:', err.oauthError.headers); } catch (h) { logger.error('Error logging oauthError.headers', h); }
+          }
         } catch (inner) {
           logger.error('Error logging oauthError details:', inner);
         }
