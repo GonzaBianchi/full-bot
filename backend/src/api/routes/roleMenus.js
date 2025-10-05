@@ -243,38 +243,45 @@ router.post('/:guildId/role-menus/:id/publish', isAuthenticated, hasGuildPermiss
       });
     }
 
-    // Construir el embed
-    const embed = new EmbedBuilder()
-      .setTitle(menu.title)
-      .setColor(0x5865F2) // Color Discord blurple
-      .setDescription('Reacciona con los emojis para obtener o quitar roles')
-      .setTimestamp()
-      .setFooter({ text: menu.exclusive ? '⚠️ Modo Exclusivo: Solo puedes tener un rol de este menú' : 'Puedes tener múltiples roles de este menú' });
-
-    // Agregar campos con las opciones
-    const fields = [];
+    // Construir descripción del embed con los roles
+    let description = 'Reacciona con los emojis para obtener o quitar roles\n\n';
+    
     for (const opt of menu.options) {
-      const role = await guild.roles.fetch(opt.roleId).catch(() => null);
-      const roleName = role ? role.name : 'Rol desconocido';
-      
       // Determinar el emoji display
       let emojiDisplay = opt.emojiIdentifier;
       if (opt.emojiId) {
-        // Es un emoji custom
+        // Verificar si es animado buscando el emoji en el servidor
+        const guildEmoji = guild.emojis.cache.get(opt.emojiId);
+        const isAnimated = guildEmoji?.animated || false;
+        
         const emojiParts = opt.emojiIdentifier.split(':');
         const emojiName = emojiParts[0] || 'emoji';
-        emojiDisplay = `<:${emojiName}:${opt.emojiId}>`;
+        
+        // Formato correcto para emojis animados y estáticos
+        emojiDisplay = isAnimated ? `<a:${emojiName}:${opt.emojiId}>` : `<:${emojiName}:${opt.emojiId}>`;
       }
       
-      const fieldValue = opt.label ? `${opt.label}` : `Obtén el rol ${roleName}`;
-      fields.push({
-        name: `${emojiDisplay} ${roleName}`,
-        value: fieldValue,
-        inline: false
-      });
+      // Usar mención de rol: <@&roleId>
+      const roleMention = `<@&${opt.roleId}>`;
+      
+      // Si hay label, usarlo; si no, solo mostrar emoji y rol
+      if (opt.label && opt.label.trim()) {
+        description += `${emojiDisplay} ${roleMention} - ${opt.label}\n`;
+      } else {
+        description += `${emojiDisplay} ${roleMention}\n`;
+      }
     }
 
-    embed.addFields(fields);
+    const embed = new EmbedBuilder()
+      .setTitle(menu.title)
+      .setColor(0x5865F2) // Color Discord blurple
+      .setDescription(description)
+      .setTimestamp()
+      .setFooter({ 
+        text: menu.exclusive 
+          ? '⚠️ Modo Exclusivo: Solo puedes tener un rol de este menú' 
+          : 'Puedes tener múltiples roles de este menú' 
+      });
 
     // Enviar mensaje
     let sent;

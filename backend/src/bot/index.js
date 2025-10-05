@@ -280,7 +280,7 @@ class BotApp {
           try { 
             await reaction.fetch(); 
           } catch (e) { 
-            logger.warn('Error fetching partial reaction:', e);
+            logger.warn('Error fetching partial reaction on remove:', e.message);
             return; 
           }
         }
@@ -289,7 +289,7 @@ class BotApp {
           try { 
             await reaction.message.fetch(); 
           } catch (e) { 
-            logger.warn('Error fetching partial message:', e);
+            logger.warn('Error fetching partial message on remove:', e.message);
             return; 
           }
         }
@@ -312,6 +312,8 @@ class BotApp {
 
         const emoji = reaction.emoji;
         const emojiKey = emoji.id ? `${emoji.name}:${emoji.id}` : emoji.name;
+        
+        logger.debug(`ReactionRemove: emoji=${emojiKey}, user=${user.tag}`);
 
         const option = menu.options.find(o => {
           if (o.emojiIdentifier === emojiKey) return true;
@@ -328,6 +330,8 @@ class BotApp {
           logger.debug(`No se encontró opción para emoji ${emojiKey} en menu ${menu._id}`);
           return;
         }
+
+        logger.debug(`Opción encontrada: roleId=${option.roleId}`);
 
         if (!guild.members.me.permissions.has('ManageRoles')) {
           logger.warn(`Bot sin permiso ManageRoles en guild ${guild.id}`);
@@ -346,13 +350,17 @@ class BotApp {
           return;
         }
 
-        if (member.roles.cache.has(role.id)) {
-          try {
-            await member.roles.remove(role.id, `Autorole removido: ${menu.title}`);
-            logger.info(`Rol ${role.name} removido de ${user.tag} en guild ${guild.name}`);
-          } catch (e) {
-            logger.error(`Error removiendo rol ${role.name} de ${user.tag}:`, e);
-          }
+        // CRÍTICO: Verificar si el usuario tiene el rol ANTES de intentar removerlo
+        if (!member.roles.cache.has(role.id)) {
+          logger.debug(`Usuario ${user.tag} no tiene el rol ${role.name}, no se puede remover`);
+          return;
+        }
+
+        try {
+          await member.roles.remove(role.id, `Autorole removido: ${menu.title}`);
+          logger.info(`✅ Rol ${role.name} removido de ${user.tag} en guild ${guild.name}`);
+        } catch (e) {
+          logger.error(`❌ Error removiendo rol ${role.name} de ${user.tag}:`, e.message);
         }
       } catch (e) {
         logger.error('Error en messageReactionRemove handler:', e);

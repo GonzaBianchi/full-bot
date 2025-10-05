@@ -179,15 +179,18 @@ function RoleMenus() {
   const getEmojiDisplay = (emojiIdentifier) => {
     const emoji = resources.emojis.find(e => e.identifier === emojiIdentifier);
     if (emoji) {
-      // Si es un emoji custom con ID
+      // Si es un emoji custom con ID, retornar la URL de la imagen
       if (emoji.id) {
-        return emoji.animated ? 
-          `<a:${emoji.name}:${emoji.id}>` : 
-          `<:${emoji.name}:${emoji.id}>`;
+        return emoji.url;
       }
     }
-    // Si es unicode o no se encuentra, devolver el identifier
+    // Si es unicode, devolver el carácter directamente
     return emojiIdentifier.split(':')[0] || emojiIdentifier;
+  };
+
+  const isCustomEmoji = (emojiIdentifier) => {
+    const emoji = resources.emojis.find(e => e.identifier === emojiIdentifier);
+    return emoji && emoji.id;
   };
 
   if (loading) {
@@ -361,12 +364,32 @@ function RoleMenus() {
                             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                           >
                             <option value="">Seleccionar emoji...</option>
-                            {resources.emojis.map(em => (
-                              <option key={em.identifier} value={em.identifier} className="bg-gray-800">
-                                {em.name} {em.animated ? '(animado)' : ''}
-                              </option>
-                            ))}
+                            {resources.emojis.map(em => {
+                              // Para mostrar el emoji en el option (limitado en HTML)
+                              const displayText = em.id 
+                                ? `${em.name} ${em.animated ? '(anim)' : '(custom)'}`
+                                : `${em.identifier} ${em.name}`;
+                              
+                              return (
+                                <option key={em.identifier} value={em.identifier} className="bg-gray-800">
+                                  {displayText}
+                                </option>
+                              );
+                            })}
                           </select>
+                          {opt.emojiIdentifier && (
+                            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                              {(() => {
+                                const selectedEmoji = resources.emojis.find(e => e.identifier === opt.emojiIdentifier);
+                                if (selectedEmoji && selectedEmoji.id) {
+                                  return <img src={selectedEmoji.url} alt="emoji" className="w-5 h-5 mr-2" />;
+                                } else if (selectedEmoji) {
+                                  return <span className="text-lg mr-2">{selectedEmoji.identifier}</span>;
+                                }
+                                return null;
+                              })()}
+                            </div>
+                          )}
                           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
                             <Smile className="w-4 h-4" />
                           </div>
@@ -510,16 +533,25 @@ function RoleMenus() {
                   {m.options && m.options.length > 0 && (
                     <div className="bg-gray-700/30 rounded-lg p-4 space-y-2">
                       <p className="text-xs font-medium text-gray-400 mb-3">Vista previa del menú:</p>
-                      {m.options.map((opt, idx) => (
-                        <div key={idx} className="flex items-center space-x-3 text-sm">
-                          <span className="text-xl">{getEmojiDisplay(opt.emojiIdentifier)}</span>
-                          <span className="text-gray-400">—</span>
-                          <span className="text-white font-medium">{getRoleName(opt.roleId)}</span>
-                          {opt.label && (
-                            <span className="text-gray-400 text-xs">- {opt.label}</span>
-                          )}
-                        </div>
-                      ))}
+                      {m.options.map((opt, idx) => {
+                        const emojiDisplay = getEmojiDisplay(opt.emojiIdentifier);
+                        const isCustom = isCustomEmoji(opt.emojiIdentifier);
+                        
+                        return (
+                          <div key={idx} className="flex items-center space-x-3 text-sm">
+                            {isCustom ? (
+                              <img src={emojiDisplay} alt="emoji" className="w-5 h-5" />
+                            ) : (
+                              <span className="text-xl">{emojiDisplay}</span>
+                            )}
+                            <span className="text-gray-400">—</span>
+                            <span className="text-indigo-400 font-medium">@{getRoleName(opt.roleId)}</span>
+                            {opt.label && (
+                              <span className="text-gray-400 text-xs">- {opt.label}</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
