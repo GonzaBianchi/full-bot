@@ -2,6 +2,7 @@ import Guild from '../../models/Guild.js';
 import User from '../../models/User.js';
 import { xpPerMessage } from '../utils/levelSystem.js';
 import logger from '../../utils/logger.js';
+import { updateMemberRoles } from '../../utils/roleManager.js';
 
 // cooldown simple en memoria por guild+user (ms)
 const cooldowns = new Map(); // key: `${guildId}:${userId}` -> timestamp of last xp grant
@@ -65,23 +66,14 @@ export default async function onMessageCreate(message) {
         logger.warn('No se pudo enviar mensaje de leveo:', e.message);
       }
 
-      // Asignar roles si hay levelRoles configurados
-      if (guildConfig.levelRoles && Array.isArray(guildConfig.levelRoles) && guildConfig.levelRoles.length > 0) {
-        const toAssign = guildConfig.levelRoles.filter(r => r.level <= newLevel).map(r => r.roleId);
-        if (toAssign.length > 0) {
-          try {
-            const member = await message.guild.members.fetch(userId).catch(() => null);
-            if (member) {
-              for (const roleId of toAssign) {
-                if (!member.roles.cache.has(roleId) && message.guild.roles.cache.has(roleId)) {
-                  await member.roles.add(roleId).catch(err => logger.warn('No se pudo asignar role:', roleId, err.message));
-                }
-              }
-            }
-          } catch (e) {
-            logger.warn('Error asignando roles de nivel:', e.message);
-          }
+      // Use centralized role manager and pass guildConfig to avoid extra DB call
+      try {
+        const member = await message.guild.members.fetch(userId).catch(() => null);
+        if (member) {
+          await updateMemberRoles(message.guild, member, newLevel, guildConfig);
         }
+      } catch (e) {
+        logger.warn('Error actualizando roles via roleManager:', e?.message || e);
       }
     }
   } catch (e) {
