@@ -5,6 +5,7 @@ import Navbar from './components/Navbar'
 import GuildSettings from './pages/GuildSettings'
 import Leaderboard from './pages/Leaderboard'
 import Home from './pages/Home'
+import RoleMenus from './pages/RoleMenus'
 import { authService } from './services/api'
 
 function App() {
@@ -72,6 +73,7 @@ function App() {
         <Route path="/dashboard" element={<div className="p-6">Bienvenido al dashboard</div>} />
         <Route path="/guild/:guildId" element={<GuildSettings />} />
         <Route path="/guild/:guildId/leaderboard" element={<Leaderboard />} />
+        <Route path="/guild/:guildId/role-menus" element={<RoleMenus />} />
       </Routes>
     </BrowserRouter>
   )

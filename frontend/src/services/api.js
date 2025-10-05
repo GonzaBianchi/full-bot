@@ -34,4 +34,13 @@ export const leaderboardService = {
   get: (guildId, page = 1, limit = 10) => 
     api.get(`/api/leaderboard/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
 };
+
+export const roleMenuService = {
+  list: (guildId) => api.get(`/api/guilds/${encodeURIComponent(guildId)}/role-menus`),
+  create: (guildId, payload) => api.post(`/api/guilds/${encodeURIComponent(guildId)}/role-menus`, payload),
+  update: (guildId, id, payload) => api.put(`/api/guilds/${encodeURIComponent(guildId)}/role-menus/${encodeURIComponent(id)}`, payload),
+  remove: (guildId, id) => api.delete(`/api/guilds/${encodeURIComponent(guildId)}/role-menus/${encodeURIComponent(id)}`),
+  publish: (guildId, id) => api.post(`/api/guilds/${encodeURIComponent(guildId)}/role-menus/${encodeURIComponent(id)}/publish`)
+};
+
 export default api;

@@ -4,6 +4,7 @@ import GuildModel from '../../models/Guild.js';
 import logger from '../../utils/logger.js';
 import { body, param, validationResult } from 'express-validator';
 import UserModel from '../../models/User.js';
+import roleMenusRoutes from './roleMenus.js';
 
 const router = express.Router();
 
@@ -146,7 +147,24 @@ router.get('/:guildId/resources', isAuthenticated, hasGuildPermission, async (re
       logger.warn('No se pudieron listar roles desde cache:', e.message);
     }
 
-    res.json({ channels, roles });
+    // Emojis: listar emojis del servidor para picker en el panel
+    let emojis = [];
+    try {
+      const emojiCollection = guild.emojis.cache || new Map();
+      emojis = Array.from(emojiCollection.values()).map(e => ({
+        id: e.id,
+        name: e.name,
+        animated: !!e.animated,
+        // identifier usable para construir custom emoji: "name:id". Para unicode usar name.
+        identifier: e.id ? `${e.name}:${e.id}` : e.name,
+        // mention representa cómo se vería en un mensaje (<:name:id> o unicode char)
+        mention: e.toString()
+      }));
+    } catch (e) {
+      logger.warn('No se pudieron listar emojis desde cache:', e.message);
+    }
+
+    res.json({ channels, roles, emojis });
   } catch (e) {
     logger.error('Error al obtener resources del guild:', e);
     res.status(500).json({ error: 'Error al obtener recursos del servidor' });

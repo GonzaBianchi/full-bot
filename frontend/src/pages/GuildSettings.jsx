@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { guildService } from '../services/api';
 import { Settings, Hash, Bell, Award, X, Plus, Save, ArrowLeft, TrendingUp, BarChart3, AlertCircle, CheckCircle2, Trash2, Shield } from 'lucide-react';
 import { toast, Toaster } from 'react-hot-toast';
+import RoleMenus from './RoleMenus';
 
 function GuildSettings() {
   const { guildId } = useParams();
@@ -223,6 +224,7 @@ function GuildSettings() {
     { id: 'general', label: 'General', icon: Settings },
     { id: 'notifications', label: 'Notificaciones', icon: Bell },
     { id: 'roles', label: 'Roles de Nivel', icon: Award },
+    { id: 'role-menus', label: 'Role Menus', icon: Shield },
     { id: 'leaderboard', label: 'Leaderboard', icon: BarChart3 }
   ];
 
@@ -731,6 +733,13 @@ function GuildSettings() {
                     <span>{saving ? 'Guardando...' : 'Guardar Configuración'}</span>
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Role Menus Section */}
+            {activeSection === 'role-menus' && (
+              <div>
+                <RoleMenus />
               </div>
             )}
 
