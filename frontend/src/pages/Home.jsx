@@ -186,13 +186,13 @@ function Home() {
                           </div>
                         </div>
                         {user ? (
-                          <a 
-                            href={`/guild/${g.id}`}
+                          <Link 
+                            to={`/guild/${g.id}`}
                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
                           >
                             <span>Configurar</span>
                             <ExternalLink className="w-4 h-4" />
-                          </a>
+                          </Link>
                         ) : (
                           <a 
                             href={authService.login(`/guild/${g.id}`)}
