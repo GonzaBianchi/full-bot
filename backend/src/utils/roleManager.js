@@ -12,80 +12,112 @@ export async function updateMemberRoles(guild, member, newLevel, guildConfig = n
       return { assigned: [], removed: [], skipped: [] };
     }
 
-    logger.info(`Actualizando roles para usuario ${member.id} en nivel ${newLevel}`);
-    logger.info(`Roles de nivel configurados: ${JSON.stringify(cfg.levelRoles)}`);
+    logger.info(`🔄 Actualizando roles para ${member.user.tag} (Nivel ${newLevel})`);
+    logger.info(`📋 Roles configurados: ${cfg.levelRoles.map(r => `Lv${r.level}=${r.roleId}`).join(', ')}`);
 
-    // Separar roles que el usuario DEBE tener vs roles que NO debe tener
-    const shouldHave = cfg.levelRoles
-      .filter(r => r.level <= newLevel)
-      .map(r => r.roleId);
-    
-    const shouldNotHave = cfg.levelRoles
-      .filter(r => r.level > newLevel)
-      .map(r => r.roleId);
+    // Modo default: solo el rol del nivel más alto alcanzado
+    const stackRoles = cfg.stackRoles === true; // default false
 
-    logger.info(`Roles que debe tener (nivel ${newLevel}): ${shouldHave.join(', ')}`);
-    logger.info(`Roles que NO debe tener (nivel ${newLevel}): ${shouldNotHave.join(', ')}`);
+    let shouldHave = [];
+    let allLevelRoleIds = cfg.levelRoles.map(r => r.roleId);
+
+    if (stackRoles) {
+      // Modo apilar: mantener TODOS los roles de niveles <= nivel actual
+      shouldHave = cfg.levelRoles
+        .filter(r => r.level <= newLevel)
+        .map(r => r.roleId);
+      
+      logger.info(`📚 Modo APILAR: Usuario debe tener ${shouldHave.length} roles`);
+    } else {
+      // Modo SOLO EL MÁS ALTO (comportamiento deseado)
+      const eligibleRoles = cfg.levelRoles
+        .filter(r => r.level <= newLevel)
+        .sort((a, b) => b.level - a.level); // ordenar de mayor a menor
+      
+      if (eligibleRoles.length > 0) {
+        shouldHave = [eligibleRoles[0].roleId]; // solo el más alto
+        logger.info(`🎯 Modo SOLO MÁS ALTO: Usuario debe tener rol de nivel ${eligibleRoles[0].level}`);
+      } else {
+        logger.info(`⚠️ Usuario nivel ${newLevel} no alcanza ningún rol configurado`);
+      }
+    }
+
+    // Todos los roles de nivel que el usuario NO debe tener
+    const shouldNotHave = allLevelRoleIds.filter(roleId => !shouldHave.includes(roleId));
+
+    logger.info(`✅ Roles a tener: ${shouldHave.join(', ') || 'ninguno'}`);
+    logger.info(`❌ Roles a quitar: ${shouldNotHave.join(', ') || 'ninguno'}`);
+
+    // Obtener todos los roles de nivel que el usuario tiene actualmente
+    const currentLevelRoles = allLevelRoleIds.filter(roleId => member.roles.cache.has(roleId));
+    logger.info(`📌 Roles actuales: ${currentLevelRoles.join(', ') || 'ninguno'}`);
 
     const assigned = [];
     const removed = [];
     const skipped = [];
 
     const botMember = guild.members.me;
+    const botHighestRole = botMember.roles?.highest;
 
-    // IMPORTANTE: Primero REMOVER roles de niveles superiores
+    // PASO 1: REMOVER todos los roles que NO debe tener
     for (const roleId of shouldNotHave) {
-      if (member.roles.cache.has(roleId)) {
-        const roleObj = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
-        
-        if (!roleObj) { 
-          skipped.push({ roleId, reason: 'Rol no encontrado en el servidor' }); 
-          continue; 
-        }
+      // Solo intentar remover si el usuario lo tiene
+      if (!member.roles.cache.has(roleId)) continue;
 
-        // Verificar jerarquía de roles
-        if (!botMember.roles || botMember.roles.highest.position <= roleObj.position) { 
-          skipped.push({ roleId, reason: 'Rol por encima del bot en jerarquía', roleName: roleObj.name }); 
-          continue; 
-        }
+      const roleObj = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+      
+      if (!roleObj) { 
+        skipped.push({ roleId, reason: 'Rol no encontrado', action: 'remove' }); 
+        continue; 
+      }
 
-        try {
-          await member.roles.remove(roleId, `Rol de nivel superior removido (nivel actual: ${newLevel})`);
-          removed.push(roleId);
-          logger.info(`✅ Rol removido: ${roleObj.name} (${roleId}) de ${member.user.tag}`);
-        } catch (e) {
-          logger.warn(`Error removiendo rol ${roleObj.name}:`, e?.message || e);
-          skipped.push({ roleId, reason: 'Error al remover', error: e.message });
-        }
+      // Verificar jerarquía
+      if (botHighestRole && botHighestRole.position <= roleObj.position) { 
+        skipped.push({ roleId, reason: `Rol ${roleObj.name} está por encima del bot`, action: 'remove' }); 
+        logger.warn(`⚠️ No puedo remover ${roleObj.name} - jerarquía insuficiente`);
+        continue; 
+      }
+
+      try {
+        await member.roles.remove(roleId, `Actualización automática: nivel ${newLevel}`);
+        removed.push(roleId);
+        logger.info(`🗑️ Rol removido: ${roleObj.name}`);
+      } catch (e) {
+        logger.error(`❌ Error removiendo rol ${roleObj.name}:`, e?.message);
+        skipped.push({ roleId, reason: `Error: ${e.message}`, action: 'remove' });
       }
     }
 
-    // Luego ASIGNAR roles que debe tener
+    // PASO 2: ASIGNAR los roles que debe tener
     for (const roleId of shouldHave) {
-      if (!member.roles.cache.has(roleId)) {
-        const roleObj = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
-        
-        if (!roleObj) { 
-          skipped.push({ roleId, reason: 'Rol no encontrado en el servidor' }); 
-          continue; 
-        }
+      // Solo intentar asignar si el usuario NO lo tiene
+      if (member.roles.cache.has(roleId)) {
+        logger.info(`✓ Usuario ya tiene el rol ${roleId}`);
+        continue;
+      }
 
-        // Verificar jerarquía de roles
-        if (!botMember.roles || botMember.roles.highest.position <= roleObj.position) { 
-          skipped.push({ roleId, reason: 'Rol por encima del bot en jerarquía', roleName: roleObj.name }); 
-          continue; 
-        }
+      const roleObj = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+      
+      if (!roleObj) { 
+        skipped.push({ roleId, reason: 'Rol no encontrado', action: 'add' }); 
+        logger.warn(`⚠️ Rol ${roleId} no existe en el servidor`);
+        continue; 
+      }
 
-        try {
-          await member.roles.add(roleId, `Rol de nivel asignado (nivel: ${newLevel})`);
-          assigned.push(roleId);
-          logger.info(`✅ Rol asignado: ${roleObj.name} (${roleId}) a ${member.user.tag}`);
-        } catch (e) {
-          logger.warn(`Error asignando rol ${roleObj.name}:`, e?.message || e);
-          skipped.push({ roleId, reason: 'Error al asignar', error: e.message });
-        }
-      } else {
-        logger.info(`Usuario ${member.user.tag} ya tiene el rol ${roleId}`);
+      // Verificar jerarquía
+      if (botHighestRole && botHighestRole.position <= roleObj.position) { 
+        skipped.push({ roleId, reason: `Rol ${roleObj.name} está por encima del bot`, action: 'add' }); 
+        logger.warn(`⚠️ No puedo asignar ${roleObj.name} - jerarquía insuficiente`);
+        continue; 
+      }
+
+      try {
+        await member.roles.add(roleId, `Nivel alcanzado: ${newLevel}`);
+        assigned.push(roleId);
+        logger.info(`✅ Rol asignado: ${roleObj.name}`);
+      } catch (e) {
+        logger.error(`❌ Error asignando rol ${roleObj.name}:`, e?.message);
+        skipped.push({ roleId, reason: `Error: ${e.message}`, action: 'add' });
       }
     }
 

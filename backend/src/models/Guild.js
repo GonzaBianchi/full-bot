@@ -5,7 +5,12 @@ const GuildSchema = new mongoose.Schema({
   xpMultiplier: { type: Number, default: 1 },
   ignoredChannels: { type: [String], default: [] },
   levelRoles: [{ level: Number, roleId: String }],
+  
+  // Modo de roles: true = apilar roles (mantener todos), false = solo el más alto
+  stackRoles: { type: Boolean, default: false },
+  
   leaderboardEnabled: { type: Boolean, default: true },
+  
   // Notificaciones de leveo
   levelUpEnabled: { type: Boolean, default: true },
   levelUpChannelId: { type: String, default: null },
