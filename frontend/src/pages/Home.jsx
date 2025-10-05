@@ -282,7 +282,7 @@ function Home() {
       {/* Features Section with Background */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <h2 className="text-3xl font-bold text-center text-white mb-3">Características Principales</h2>
           <p className="text-center text-gray-400 mb-12">Descubre todo lo que el bot puede hacer por tu servidor</p>
           
