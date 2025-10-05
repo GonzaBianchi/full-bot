@@ -184,7 +184,7 @@ class BotApp {
           return;
         }
 
-        const member = await guild.members.fetch(user.id).catch(() => null);
+        const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
         if (!member) {
           logger.warn(`Member ${user.id} no encontrado en guild ${guild.id}`);
           return;
@@ -301,7 +301,7 @@ class BotApp {
           return;
         }
 
-        const member = await guild.members.fetch(user.id).catch(() => null);
+        const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
         if (!member) {
           logger.warn(`Member ${user.id} no encontrado en guild ${guild.id}`);
           return;
