@@ -62,6 +62,7 @@ function GuildSettings() {
       const msg = cfg.levelUpMessage || '🎉 {mention} ha subido al nivel {level}!';
       const enabled = cfg.levelUpEnabled ?? true;
       const channel = cfg.levelUpChannelId || '';
+      const lvlRoles = cfg.levelRoles || []; // AGREGAR ESTA LÍNEA
       
       setMultiplier(String(mult));
       setOriginalMultiplier(String(mult));
@@ -77,6 +78,10 @@ function GuildSettings() {
       
       setLevelUpChannel(channel);
       setOriginalLevelUpChannel(channel);
+      
+      // AGREGAR ESTAS LÍNEAS
+      setLevelRoles(lvlRoles);
+      setOriginalLevelRoles([...lvlRoles]);
       
       setChannels(resResources.data.channels || []);
       setRoles(resResources.data.roles || []);
@@ -157,6 +162,63 @@ function GuildSettings() {
     return channel ? channel.name : channelId;
   };
 
+  const getRoleName = (roleId) => {
+    const role = roles.find(r => r.id === roleId);
+    return role ? role.name : 'Rol desconocido';
+  };
+
+  const isRoleUsed = (roleId) => {
+    return levelRoles.some(lr => lr.roleId === roleId);
+  };
+
+  const isLevelUsed = (level) => {
+    return levelRoles.some(lr => lr.level === parseInt(level));
+  };
+
+  const addLevelRole = () => {
+    if (!selectedRoleForLevel || !selectedLevelForRole) return;
+    
+    const level = parseInt(selectedLevelForRole);
+    
+    if (isLevelUsed(level)) {
+      showToast('Ya existe un rol asignado a este nivel', 'error');
+      return;
+    }
+    
+    setLevelRoles([...levelRoles, { level, roleId: selectedRoleForLevel }]);
+    setSelectedRoleForLevel('');
+    setSelectedLevelForRole('1');
+  };
+
+  const removeLevelRole = (level) => {
+    setLevelRoles(levelRoles.filter(lr => lr.level !== level));
+  };
+
+  const sortedLevelRoles = () => {
+    return [...levelRoles].sort((a, b) => a.level - b.level);
+  };
+
+  const hasRolesChanges = () => {
+    return JSON.stringify(levelRoles) !== JSON.stringify(originalLevelRoles);
+  };
+
+  const saveRoles = async () => {
+    setSaving(true);
+    try {
+      await guildService.updateLevelRoles(guildId, levelRoles);
+      
+      // Actualizar valores originales después de guardar
+      setOriginalLevelRoles([...levelRoles]);
+      
+      showToast('✅ Roles de nivel guardados correctamente', 'success');
+    } catch (e) {
+      console.error('Error guardando roles:', e);
+      showToast('❌ Error al guardar los roles', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const menuItems = [
     { id: 'general', label: 'General', icon: Settings },
     { id: 'notifications', label: 'Notificaciones', icon: Bell },
@@ -197,8 +259,9 @@ function GuildSettings() {
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeSection === item.id;
-                const hasChanges = item.id === 'general' ? hasGeneralChanges() : 
-                                 item.id === 'notifications' ? hasNotificationChanges() : false;
+                const itemHasChanges = item.id === 'general' ? hasGeneralChanges() : 
+                                item.id === 'notifications' ? hasNotificationChanges() :
+                                item.id === 'roles' ? hasRolesChanges() : false;
                 
                 return (
                   <button
@@ -214,7 +277,7 @@ function GuildSettings() {
                       <Icon className="w-5 h-5" />
                       <span className="font-medium">{item.label}</span>
                     </div>
-                    {hasChanges && (
+                    {itemHasChanges && (
                       <div className="w-2 h-2 bg-yellow-400 rounded-full" title="Cambios sin guardar"></div>
                     )}
                   </button>
