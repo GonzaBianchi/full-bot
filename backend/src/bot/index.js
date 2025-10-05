@@ -204,10 +204,7 @@ class BotApp {
           return false;
         });
 
-        if (!option) {
-          logger.debug(`No se encontró opción para emoji ${emojiKey} en menu ${menu._id}`);
-          return;
-        }
+        if (!option) return;
 
         if (!guild.members.me.permissions.has('ManageRoles')) {
           logger.warn(`Bot sin permiso ManageRoles en guild ${guild.id}`);
@@ -258,7 +255,7 @@ class BotApp {
 
               if (otherReaction) {
                 await otherReaction.users.remove(user.id).catch(err => {
-                  logger.debug(`No se pudo remover reacción de ${user.tag}:`, err.message);
+                  logger.warn(`No se pudo remover reacción de ${user.tag}:`, err.message);
                 });
               }
             } catch (e) {
@@ -312,8 +309,6 @@ class BotApp {
 
         const emoji = reaction.emoji;
         const emojiKey = emoji.id ? `${emoji.name}:${emoji.id}` : emoji.name;
-        
-        logger.debug(`ReactionRemove: emoji=${emojiKey}, user=${user.tag}`);
 
         const option = menu.options.find(o => {
           if (o.emojiIdentifier === emojiKey) return true;
@@ -326,12 +321,7 @@ class BotApp {
           return false;
         });
 
-        if (!option) {
-          logger.debug(`No se encontró opción para emoji ${emojiKey} en menu ${menu._id}`);
-          return;
-        }
-
-        logger.debug(`Opción encontrada: roleId=${option.roleId}`);
+        if (!option) return;
 
         if (!guild.members.me.permissions.has('ManageRoles')) {
           logger.warn(`Bot sin permiso ManageRoles en guild ${guild.id}`);
@@ -352,7 +342,6 @@ class BotApp {
 
         // Verificar si el usuario tiene el rol ANTES de intentar removerlo
         if (!member.roles.cache.has(role.id)) {
-          logger.debug(`Usuario ${user.tag} no tiene el rol ${role.name}, no se puede remover`);
           return;
         }
 
