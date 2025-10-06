@@ -15,7 +15,8 @@ import authRoutes from './routes/auth.js';
 import guildRoutes from './routes/guilds.js';
 import levelRoutes from './routes/levels.js';
 import leaderboardRoutes from './routes/leaderboard.js';
-import messageRoutes from './routes/messages.js'; // ← NUEVA RUTA
+import messageRoutes from './routes/messages.js';
+import birthdaysRoutes from './routes/birthdays.js';
 
 class ApiServer {
   constructor(discordClient) {
@@ -175,6 +176,7 @@ class ApiServer {
     this.app.use('/api/guilds', messageRoutes); // ← NUEVA RUTA DE MENSAJES
     this.app.use('/api/levels', levelRoutes);
     this.app.use('/api/leaderboard', leaderboardRoutes);
+    this.app.use('/api/birthdays', birthdaysRoutes); // ← RUTA DE CUMPLEAÑOS
     // ====================================
 
     // Ruta 404

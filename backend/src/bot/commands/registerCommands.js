@@ -24,8 +24,9 @@ export default async function registerCommands(clientId, token, guildId = null) 
     'testlogro.js',
     'botinfo.js',
     'serverconfig.js',
-    'userhelp.js',      // NUEVO: Help para usuarios
-    'adminhelp.js'      // NUEVO: Help para admins
+    'userhelp.js',
+    'adminhelp.js',
+    'cumpleanos.js'      // ← NUEVO COMANDO
   ];
 
   for (const file of allowedFiles) {
