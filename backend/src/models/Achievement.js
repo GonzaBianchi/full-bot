@@ -18,7 +18,7 @@ const AchievementSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['messages', 'reactions', 'voice_time', 'boost'],
+    enum: ['messages', 'reactions', 'reactions_given', 'voice_time', 'boost'],
     index: true
   },
   

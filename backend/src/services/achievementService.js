@@ -46,6 +46,21 @@ class AchievementService {
   }
 
   /**
+   * NUEVO: Trackea una reacción dada por un usuario
+   */
+  async trackReactionGiven(userId, guildId, channelId = null) {
+    try {
+      const userAch = await this.getUserAchievement(userId, guildId);
+      userAch.stats.totalReactionsGiven += 1;
+      
+      await this.checkAndUnlockAchievements(userAch, 'reactions_given', channelId);
+      await userAch.save();
+    } catch (error) {
+      logger.error('Error tracking reaction given achievement:', error);
+    }
+  }
+
+  /**
    * Trackea tiempo en voice cuando un usuario se une
    */
   async trackVoiceJoin(userId, guildId, channelId) {
@@ -93,6 +108,21 @@ class AchievementService {
       await userAch.save();
     } catch (error) {
       logger.error('Error tracking boost achievement:', error);
+    }
+  }
+
+  /**
+   * NUEVO: Trackea una reacción dada por un usuario
+   */
+  async trackReactionGiven(userId, guildId, channelId = null) {
+    try {
+      const userAch = await this.getUserAchievement(userId, guildId);
+      userAch.stats.totalReactionsGiven += 1;
+      
+      await this.checkAndUnlockAchievements(userAch, 'reactions_given', channelId);
+      await userAch.save();
+    } catch (error) {
+      logger.error('Error tracking reaction given achievement:', error);
     }
   }
 
@@ -151,6 +181,9 @@ class AchievementService {
           break;
         case 'reactions':
           progress.currentValue = userAch.stats.totalReactions;
+          break;
+        case 'reactions_given':
+          progress.currentValue = userAch.stats.totalReactionsGiven;
           break;
         case 'voice_time':
           progress.currentValue = userAch.stats.totalVoiceTime;
@@ -320,6 +353,9 @@ class AchievementService {
           break;
         case 'reactions':
           currentValue = userAch.stats.totalReactions;
+          break;
+        case 'reactions_given':
+          currentValue = userAch.stats.totalReactionsGiven;
           break;
         case 'voice_time':
           currentValue = userAch.stats.totalVoiceTime;

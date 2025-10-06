@@ -16,14 +16,14 @@ export function setupAchievementTracking(client) {
       await achievementService.trackMessage(
         message.author.id, 
         message.guild.id,
-        message.channel.id // ← Pasar el channelId para notificaciones
+        message.channel.id
       );
     } catch (error) {
       logger.error('Error tracking message for achievements:', error);
     }
   });
 
-  // 2. Trackear reacciones recibidas
+  // 2. Trackear reacciones (tanto recibidas como dadas)
   client.on('messageReactionAdd', async (reaction, user) => {
     try {
       if (reaction.partial) await reaction.fetch();
@@ -31,14 +31,21 @@ export function setupAchievementTracking(client) {
       
       if (!reaction.message.guild || user.bot) return;
       
-      // Trackear para el autor del mensaje (quien recibe la reacción)
-      if (!reaction.message.author.bot) {
+      // Trackear para el autor del mensaje (quien RECIBE la reacción)
+      if (!reaction.message.author.bot && reaction.message.author.id !== user.id) {
         await achievementService.trackReaction(
           reaction.message.author.id, 
           reaction.message.guild.id,
-          reaction.message.channel.id // ← Pasar el channelId
+          reaction.message.channel.id
         );
       }
+
+      // ⭐ NUEVO: Trackear para el usuario que DIO la reacción
+      await achievementService.trackReactionGiven(
+        user.id,
+        reaction.message.guild.id,
+        reaction.message.channel.id
+      );
     } catch (error) {
       logger.error('Error tracking reaction for achievements:', error);
     }
@@ -51,6 +58,9 @@ export function setupAchievementTracking(client) {
       const guildId = newState.guild?.id || oldState.guild?.id;
       
       if (!guildId) return;
+      
+      const member = newState.member || oldState.member;
+      if (member?.user?.bot) return; // Ignorar bots
       
       // Usuario se unió a un canal
       if (!oldState.channelId && newState.channelId) {
@@ -75,7 +85,7 @@ export function setupAchievementTracking(client) {
   // 4. Trackear boosts del servidor
   client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
-      if (!newMember.guild) return;
+      if (!newMember.guild || newMember.user.bot) return;
       
       // Verificar si el miembro empezó a boostear
       const wasBooster = oldMember.premiumSince !== null;

@@ -16,7 +16,8 @@ const UserAchievementSchema = new mongoose.Schema({
   // Estadísticas generales (para cálculos rápidos)
   stats: {
     totalMessages: { type: Number, default: 0 },
-    totalReactions: { type: Number, default: 0 }, // Reacciones recibidas
+    totalReactions: { type: Number, default: 0 },
+    totalReactionsGiven: { type: Number, default: 0 }, // Reacciones recibidas
     totalVoiceTime: { type: Number, default: 0 }, // En segundos
     hasBoosted: { type: Boolean, default: false }
   },
