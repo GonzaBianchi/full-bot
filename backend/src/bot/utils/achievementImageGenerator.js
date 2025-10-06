@@ -1,6 +1,5 @@
 // backend/src/utils/achievementImageGenerator.js
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import axios from 'axios';
 import logger from './logger.js';
 
 const TIER_COLORS = [
@@ -33,8 +32,9 @@ export async function generateAchievementNotification({
   let backgroundImage = null;
   if (imageUrl) {
     try {
-      const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-      backgroundImage = await loadImage(Buffer.from(response.data));
+      const response = await fetch(imageUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      backgroundImage = await loadImage(Buffer.from(arrayBuffer));
     } catch (error) {
       logger.warn('No se pudo cargar imagen de logro personalizada');
     }
