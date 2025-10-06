@@ -39,6 +39,12 @@ export default {
 
   async autocomplete(interaction) {
     try {
+      // Verificar si ya fue respondido
+      if (interaction.responded) {
+        logger.warn('Autocomplete ya respondido, ignorando...');
+        return;
+      }
+
       const focusedValue = interaction.options.getFocused().toLowerCase();
       const guildId = interaction.guildId;
 
@@ -77,7 +83,14 @@ export default {
       await interaction.respond(choices);
     } catch (error) {
       logger.error('Error en autocomplete de testlogro:', error);
-      await interaction.respond([]);
+      // Solo responder si no se ha respondido ya
+      if (!interaction.responded) {
+        try {
+          await interaction.respond([]);
+        } catch (e) {
+          logger.error('No se pudo responder al autocomplete:', e.message);
+        }
+      }
     }
   },
 

@@ -36,9 +36,16 @@ export default {
         }
       } catch (error) {
         logger.error(`Error en autocomplete de /${commandName}:`, error);
-        await interaction.respond([]);
+        // No responder de nuevo si ya se respondió
+        if (!interaction.responded) {
+          try {
+            await interaction.respond([]);
+          } catch (e) {
+            // Ignorar error si ya fue respondido
+          }
+        }
       }
-      return;
+      return; // IMPORTANTE: Salir aquí para no continuar con el manejo de comandos
     }
 
     // Manejar comandos slash
