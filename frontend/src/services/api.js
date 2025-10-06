@@ -43,4 +43,11 @@ export const roleMenuService = {
   publish: (guildId, id) => api.post(`/api/guilds/${encodeURIComponent(guildId)}/role-menus/${encodeURIComponent(id)}/publish`)
 };
 
+export const imageService = {
+  getConfig: (guildId) => api.get(`/api/guilds/${guildId}/config/images`),
+  updateRankCard: (guildId, payload) => api.post(`/api/guilds/${guildId}/config/images/rank-card`, payload),
+  updateAchievementNotification: (guildId, payload) => api.post(`/api/guilds/${guildId}/config/images/achievement-notification`, payload),
+  resetImage: (guildId, type) => api.delete(`/api/guilds/${guildId}/config/images/${type}`)
+};
+
 export default api;

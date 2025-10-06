@@ -105,6 +105,19 @@ function GuildSettings() {
               />
             )}
 
+            {activeSection === 'images' && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">🎨 Configuración de Imágenes</h2>
+                  <p className="text-gray-400 mb-6">Personaliza los banners de rank cards y notificaciones de logros</p>
+                </div>
+                
+                <ImageBannerSettings guildId={guildId} type="rank-card" />
+                <div className="my-8 border-t border-gray-700"></div>
+                <ImageBannerSettings guildId={guildId} type="achievement-notification" />
+              </div>
+            )}
+
             {activeSection === 'leaderboard' && (
               <LeaderboardSection guildId={guildId} />
             )}

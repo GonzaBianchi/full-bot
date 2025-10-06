@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAchievements } from '../../hooks/useAchievements';
 import { Trophy, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Award, Bell, Hash } from 'lucide-react';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { ImageBannerSettings } from './ImageBannerSettings';
 
 export function AchievementsSettings({ guildId, roles, channels }) {
   const {
@@ -124,6 +125,11 @@ export function AchievementsSettings({ guildId, roles, channels }) {
           ))}
         </div>
       )}
+
+      <div className="mt-8">
+        <h2 className="text-2xl font-bold text-white mb-4">🎨 Personalización Visual</h2>
+        <ImageBannerSettings guildId={guildId} type="achievement-notification" />
+      </div>
 
       {/* Modal */}
       {showModal && (
