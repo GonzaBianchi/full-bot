@@ -8,7 +8,8 @@ import { xpForLevel } from './utils/levelSystem.js';
 import registerCommands from './commands/registerCommands.js';
 import RoleMenu from '../models/RoleMenu.js';
 import setupAchievementTracking from './events/achievementTracking.js';
-import setupMediaFilter from './events/mediaFilterHandler.js'; 
+import setupMediaFilter from './events/mediaFilterHandler.js';
+import BirthdayChecker from '../services/birthdayChecker.js'; // ← IMPORTAR BIRTHDAY CHECKER
 
 dotenv.config();
 
@@ -20,18 +21,19 @@ class BotApp {
         GatewayIntentBits.GuildMessages, 
         GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMessageReactions,
-        GatewayIntentBits.GuildVoiceStates, // ← NECESARIO para voice tracking
-        GatewayIntentBits.GuildMembers // ← NECESARIO para boost tracking
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMembers
       ],
       partials: [
         Partials.Channel, 
         Partials.Message, 
         Partials.Reaction,
-        Partials.GuildMember // ← NECESARIO para eventos de miembros
+        Partials.GuildMember
       ]
     });
 
     this.api = new ApiServer(this.client);
+    this.birthdayChecker = null; // ← AGREGAR REFERENCIA AL BIRTHDAY CHECKER
     this.setupEventHandlers();
   }
 
@@ -134,6 +136,16 @@ class BotApp {
         logger.error('❌ Error configurando media filter:', e);
       }
       // =========================================================
+
+      // ========== INICIAR BIRTHDAY CHECKER ==========
+      try {
+        this.birthdayChecker = new BirthdayChecker(this.client);
+        this.birthdayChecker.start();
+        logger.info('✅ Birthday checker iniciado correctamente');
+      } catch (e) {
+        logger.error('❌ Error iniciando birthday checker:', e);
+      }
+      // =============================================
 
       // Register slash commands
       try {
@@ -402,6 +414,13 @@ class BotApp {
   async shutdown() {
     try {
       logger.info('Iniciando graceful shutdown...');
+      
+      // ========== DETENER BIRTHDAY CHECKER ==========
+      if (this.birthdayChecker) {
+        logger.info('Deteniendo birthday checker...');
+        this.birthdayChecker.stop();
+      }
+      // =============================================
       
       if (this.client) {
         logger.info('Desconectando bot de Discord...');
