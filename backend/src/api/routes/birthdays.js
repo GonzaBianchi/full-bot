@@ -1,4 +1,4 @@
-// backend/src/api/routes/birthdays.js
+// backend/src/api/routes/birthday.js
 import express from 'express';
 import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
 import GuildModel from '../../models/Guild.js';

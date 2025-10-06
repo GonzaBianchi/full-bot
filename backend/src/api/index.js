@@ -16,7 +16,7 @@ import guildRoutes from './routes/guilds.js';
 import levelRoutes from './routes/levels.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import messageRoutes from './routes/messages.js';
-import birthdaysRoutes from './routes/birthdays.js';
+import birthdaysRoutes from './routes/birthday.js'; // ← CORREGIDO: birthday.js (singular)
 
 class ApiServer {
   constructor(discordClient) {
@@ -173,10 +173,10 @@ class ApiServer {
     // ========== Rutas de la API ==========
     this.app.use('/api/auth', authRoutes);
     this.app.use('/api/guilds', guildRoutes);
-    this.app.use('/api/guilds', messageRoutes); // ← NUEVA RUTA DE MENSAJES
+    this.app.use('/api/guilds', messageRoutes);
+    this.app.use('/api/guilds', birthdaysRoutes); // ← RUTA DE CUMPLEAÑOS (debe ir bajo /api/guilds)
     this.app.use('/api/levels', levelRoutes);
     this.app.use('/api/leaderboard', leaderboardRoutes);
-    this.app.use('/api/birthdays', birthdaysRoutes); // ← RUTA DE CUMPLEAÑOS
     // ====================================
 
     // Ruta 404
