@@ -51,12 +51,16 @@ export const imageService = {
   resetImage: (guildId, type) => api.delete(`/api/guilds/${guildId}/config/images/${type}`)
 };
 
-// ========== NUEVO: Servicio para filtro multimedia ==========
 export const mediaFilterService = {
   getConfig: (guildId) => api.get(`/api/guilds/${guildId}/config/media-filter`),
   update: (guildId, payload) => api.post(`/api/guilds/${guildId}/config/media-filter`, payload),
   reset: (guildId) => api.delete(`/api/guilds/${guildId}/config/media-filter`)
 };
-// ============================================================
+
+export const birthdayService = {
+  getConfig: (guildId) => api.get(`/api/guilds/${guildId}/config/birthdays`),
+  update: (guildId, payload) => api.post(`/api/guilds/${guildId}/config/birthdays`, payload),
+  reset: (guildId) => api.delete(`/api/guilds/${guildId}/config/birthdays`)
+};
 
 export default api;

@@ -14,7 +14,8 @@ import { LeaderboardSection } from '../components/guild-settings/LeaderboardSect
 import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSettings';
 import { AchievementsSettings } from '../components/guild-settings/AchievementsSettings';
 import { CustomMessages } from '../components/guild-settings/CustomMessages';
-import { MediaFilterSettings } from '../components/guild-settings/MediaFilterSettings'; // ← IMPORTAR
+import { MediaFilterSettings } from '../components/guild-settings/MediaFilterSettings';
+import { BirthdaySettings } from '../components/guild-settings/BirthdaySettings'; // ← NUEVO
 import RoleMenus from './RoleMenus';
 import { guildService } from '../services/api';
 
@@ -64,7 +65,8 @@ function GuildSettings() {
     'auto-roles': autoRolesSettings.hasChanges,
     'role-menus': false,
     'custom-messages': false,
-    'media-filter': false, // ← AGREGAR
+    'media-filter': false,
+    'birthdays': false, // ← NUEVO
     achievements: false,
     leaderboard: false
   };
@@ -126,7 +128,6 @@ function GuildSettings() {
               />
             )}
 
-            {/* ========== NUEVA SECCIÓN ========== */}
             {activeSection === 'media-filter' && (
               <MediaFilterSettings 
                 guildId={guildId} 
@@ -135,7 +136,17 @@ function GuildSettings() {
                 roles={roles}
               />
             )}
-            {/* =================================== */}
+
+            {/* ========== NUEVA SECCIÓN DE CUMPLEAÑOS ========== */}
+            {activeSection === 'birthdays' && (
+              <BirthdaySettings 
+                guildId={guildId} 
+                config={config}
+                channels={channels}
+                roles={roles}
+              />
+            )}
+            {/* ================================================= */}
 
             {activeSection === 'leaderboard' && (
               <LeaderboardSection guildId={guildId} />
