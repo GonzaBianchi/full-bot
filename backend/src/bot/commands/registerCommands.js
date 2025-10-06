@@ -20,7 +20,11 @@ export default async function registerCommands(clientId, token, guildId = null) 
     'restarxp.js', 
     'leaderboard.js', 
     'rank.js',
-    'logros.js'  // ← NUEVO
+    'logros.js',
+    'testlogro.js',
+    'botinfo.js',
+    'serverconfig.js',
+    'help.js'
   ];
 
   for (const file of allowedFiles) {
