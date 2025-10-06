@@ -1,7 +1,7 @@
 import Achievement from '../models/Achievement.js';
 import UserAchievement from '../models/UserAchievement.js';
 import GuildModel from '../models/Guild.js';
-import { generateAchievementNotification } from '../utils/achievementImageGenerator.js';
+import { generateAchievementNotification } from '../bot/utils/achievementImageGenerator.js';
 import { AttachmentBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 
