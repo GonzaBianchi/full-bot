@@ -16,6 +16,7 @@ import RoleMenus from './RoleMenus';
 import { useAutoRoles } from '../hooks/useAutoRoles';
 import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSettings';
 import { AchievementsSettings } from '../components/guild-settings/AchievementsSettings';
+import { ImageBannerSettings } from '../components/guild-settings/ImageBannerSettings';
 
 function GuildSettings() {
   const { guildId } = useParams();
