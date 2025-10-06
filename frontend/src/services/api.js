@@ -24,7 +24,7 @@ export const guildService = {
   updateLevelRoles: (guildId, roles) => api.post(`/api/guilds/${guildId}/config/level-roles`, { roles }),
   getResources: (guildId) => api.get(`/api/guilds/${guildId}/resources`),
   getPublicInfo: (guildId) => api.get(`/api/guilds/public/${encodeURIComponent(guildId)}/info`),
-  sendMessage: (guildId, messageData) => api.post(`/guilds/${guildId}/messages/send`, messageData),
+  sendMessage: (guildId, messageData) => api.post(`/api/guilds/${guildId}/messages/send`, messageData),
 };
 
 export const leaderboardService = {
