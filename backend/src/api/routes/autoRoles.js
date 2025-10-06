@@ -53,21 +53,22 @@ router.post('/:guildId/config/auto-roles', isAuthenticated, hasGuildPermission, 
     const { guildId } = req.params;
     const { enabled, roles, restoreLevelRoles, welcomeChannelId, welcomeMessage } = req.body;
 
-    const update = { autoRoles: {} };
+    // Usar notación de punto para campos anidados
+    const update = {};
     
-    if (typeof enabled !== 'undefined') update.autoRoles.enabled = enabled;
-    if (Array.isArray(roles)) update.autoRoles.roles = roles;
-    if (typeof restoreLevelRoles !== 'undefined') update.autoRoles.restoreLevelRoles = restoreLevelRoles;
-    if (typeof welcomeChannelId !== 'undefined') update.autoRoles.welcomeChannelId = welcomeChannelId;
-    if (typeof welcomeMessage !== 'undefined') update.autoRoles.welcomeMessage = welcomeMessage;
+    if (typeof enabled !== 'undefined') update['autoRoles.enabled'] = enabled;
+    if (Array.isArray(roles)) update['autoRoles.roles'] = roles;
+    if (typeof restoreLevelRoles !== 'undefined') update['autoRoles.restoreLevelRoles'] = restoreLevelRoles;
+    if (typeof welcomeChannelId !== 'undefined') update['autoRoles.welcomeChannelId'] = welcomeChannelId;
+    if (typeof welcomeMessage !== 'undefined') update['autoRoles.welcomeMessage'] = welcomeMessage;
 
     const cfg = await GuildModel.findOneAndUpdate(
       { guildId },
-      update,
+      { $set: update }, // ← Importante: usar $set
       { new: true, upsert: true }
     );
     
-    logger.info(`Auto-roles config updated for guild ${guildId}`);
+    logger.info(`✅ Auto-roles config updated for guild ${guildId}`);
     res.json({ autoRoles: cfg.autoRoles });
   } catch (e) {
     logger.error('Error al actualizar config de auto-roles:', e);
