@@ -1,6 +1,6 @@
 // backend/src/utils/achievementImageGenerator.js
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import logger from './logger.js';
+import logger from '../../utils/logger.js';
 
 const TIER_COLORS = [
   '#CD7F32', // Bronce - Tier 1
