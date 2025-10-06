@@ -342,8 +342,44 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
           channelId: null,
           message: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
         }
+      },
+      {
+        guildId,
+        type: 'booster',
+        name: '🚀 Booster',
+        description: 'Da boost al servidor',
+        icon: '🚀',
+        tiers: [
+          { tier: 1, title: 'Impulsor', target: 1, emoji: '⚡', description: 'Has impulsado el servidor' }
+        ],
+        enabled: true,
+        notifications: {
+          enabled: true,
+          channelId: null,
+          message: '🚀 {mention} ha desbloqueado el logro: **{achievement}**!'
+        }
+      },
+      {
+        guildId,
+        type: 'reactions_given',
+        name: '👍 Entusiasta',
+        description: 'Añade reacciones a mensajes de otros',
+        icon: '👍',
+        tiers: [
+          { tier: 1, title: 'Participativo', target: 50, emoji: '🙂', description: 'Reaccionaste a 50 mensajes' },
+          { tier: 2, title: 'Apoyador', target: 250, emoji: '😃', description: 'Reaccionaste a 250 mensajes' },
+          { tier: 3, title: 'Fanático', target: 1000, emoji: '🔥', description: 'Reaccionaste a 1000 mensajes' },
+          { tier: 4, title: 'Incondicional', target: 2500, emoji: '💖', description: 'Reaccionaste a 2500 mensajes' }
+        ],
+        enabled: true,
+        notifications: {
+          enabled: true,
+          channelId: null,
+          message: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+        }
       }
     ];
+
 
     const created = await Achievement.insertMany(defaultAchievements);
 
