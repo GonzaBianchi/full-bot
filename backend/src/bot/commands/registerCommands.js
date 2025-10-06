@@ -13,7 +13,7 @@ export default async function registerCommands(clientId, token, guildId = null) 
 
   logger.info(`Buscando comandos en: ${commandsPath}`);
 
-  // Only register the approved commands
+  // Comandos aprobados para registro
   const allowedFiles = [
     'adminSetLevel.js', 
     'sumarxp.js', 
@@ -24,7 +24,8 @@ export default async function registerCommands(clientId, token, guildId = null) 
     'testlogro.js',
     'botinfo.js',
     'serverconfig.js',
-    'help.js'
+    'userhelp.js',      // NUEVO: Help para usuarios
+    'adminhelp.js'      // NUEVO: Help para admins
   ];
 
   for (const file of allowedFiles) {

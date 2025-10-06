@@ -1,21 +1,22 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import logger from '../../utils/logger.js';
 
 export default {
   data: new SlashCommandBuilder()
-    .setName('help')
-    .setDescription('Muestra la lista de comandos disponibles')
-    .addBooleanOption(option =>
-      option
-        .setName('admin')
-        .setDescription('Mostrar también comandos de administrador')
-        .setRequired(false)
-    ),
+    .setName('adminhelp')
+    .setDescription('Muestra todos los comandos disponibles (usuarios y administradores)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction) {
     try {
-      const showAdmin = interaction.options.getBoolean('admin') || false;
       const isAdmin = interaction.memberPermissions?.has('ManageGuild');
+
+      if (!isAdmin) {
+        return await interaction.reply({
+          content: '❌ No tienes permisos para ver comandos de administrador. Usa `/userhelp` para ver comandos de usuario.',
+          ephemeral: true
+        });
+      }
 
       // Comandos públicos
       const userCommands = [
@@ -40,9 +41,9 @@ export default {
           usage: '/botinfo'
         },
         {
-          name: '/help',
-          description: 'Muestra este mensaje de ayuda',
-          usage: '/help [admin:true]'
+          name: '/userhelp',
+          description: 'Muestra comandos para usuarios',
+          usage: '/userhelp'
         }
       ];
 
@@ -72,13 +73,18 @@ export default {
           name: '/testlogro',
           description: 'Probar una notificación de logro',
           usage: '/testlogro <logro> [tier] [@usuario] [#canal]'
+        },
+        {
+          name: '/adminhelp',
+          description: 'Muestra este mensaje (todos los comandos)',
+          usage: '/adminhelp'
         }
       ];
 
       const embed = new EmbedBuilder()
-        .setTitle('📚 Comandos Disponibles')
+        .setTitle('📚 Todos los Comandos del Bot')
         .setColor(0x5865F2)
-        .setDescription('Lista de comandos del bot. Usa `/help admin:true` para ver comandos de administrador.');
+        .setDescription('Lista completa de comandos disponibles en el servidor.');
 
       // Agregar comandos de usuario
       let userCommandsText = '';
@@ -92,23 +98,17 @@ export default {
         inline: false
       });
 
-      // Agregar comandos de admin si se solicita y el usuario es admin
-      if (showAdmin && isAdmin) {
-        let adminCommandsText = '';
-        adminCommands.forEach(cmd => {
-          adminCommandsText += `**${cmd.name}**\n${cmd.description}\n\`${cmd.usage}\`\n\n`;
-        });
+      // Agregar comandos de admin
+      let adminCommandsText = '';
+      adminCommands.forEach(cmd => {
+        adminCommandsText += `**${cmd.name}**\n${cmd.description}\n\`${cmd.usage}\`\n\n`;
+      });
 
-        embed.addFields({
-          name: '⚙️ Comandos de Administrador',
-          value: adminCommandsText,
-          inline: false
-        });
-      } else if (showAdmin && !isAdmin) {
-        embed.setFooter({ 
-          text: '⚠️ No tienes permisos para ver comandos de administrador' 
-        });
-      }
+      embed.addFields({
+        name: '⚙️ Comandos de Administrador',
+        value: adminCommandsText,
+        inline: false
+      });
 
       // Panel web
       embed.addFields({
@@ -119,10 +119,10 @@ export default {
 
       embed.setTimestamp();
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
-      logger.info(`Comando help ejecutado por ${interaction.user.tag} (admin: ${showAdmin})`);
+      await interaction.reply({ embeds: [embed] });
+      logger.info(`Comando adminhelp ejecutado por ${interaction.user.tag}`);
     } catch (error) {
-      logger.error('Error en comando help:', error);
+      logger.error('Error en comando adminhelp:', error);
       await interaction.reply({
         content: '❌ Hubo un error al mostrar la ayuda.',
         ephemeral: true

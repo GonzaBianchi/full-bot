@@ -50,7 +50,7 @@ export default {
           {
             name: '🔗 Enlaces',
             value: `[Panel Web](${process.env.FRONTEND_URL || 'https://therifthavenfull.vercel.app'})\n` +
-                   `[Soporte](https://discord.gg/tu-servidor)\n` +
+                   `[Desarrollador](<@220625834627694592>)\n` +
                    `[Invitar Bot](https://discord.com/api/oauth2/authorize?client_id=${bot.id}&permissions=8&scope=bot%20applications.commands)`,
             inline: false
           },

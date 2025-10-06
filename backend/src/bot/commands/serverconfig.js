@@ -45,24 +45,6 @@ export default {
         inline: false
       });
 
-      // Notificaciones de nivel
-      let notifText = `**Estado:** ${config.levelUpEnabled ? '✅ Activadas' : '❌ Desactivadas'}\n`;
-      
-      if (config.levelUpEnabled) {
-        if (config.levelUpChannelId) {
-          notifText += `**Canal:** <#${config.levelUpChannelId}>\n`;
-        } else {
-          notifText += `**Canal:** Mismo donde se sube de nivel\n`;
-        }
-        notifText += `**Mensaje:** \`${config.levelUpMessage}\``;
-      }
-
-      embed.addFields({
-        name: '🔔 Notificaciones',
-        value: notifText,
-        inline: false
-      });
-
       // Roles de nivel
       if (config.levelRoles && config.levelRoles.length > 0) {
         const sortedRoles = config.levelRoles
@@ -104,7 +86,7 @@ export default {
       });
 
       embed.setFooter({ 
-        text: 'Usa /help para ver todos los comandos disponibles' 
+        text: 'Usa /adminhelp para ver todos los comandos disponibles' 
       });
       embed.setTimestamp();
 

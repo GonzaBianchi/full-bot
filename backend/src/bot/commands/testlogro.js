@@ -42,21 +42,37 @@ export default {
       const focusedValue = interaction.options.getFocused().toLowerCase();
       const guildId = interaction.guildId;
 
+      logger.info(`Autocomplete de testlogro: búsqueda="${focusedValue}" en guild ${guildId}`);
+
+      // Buscar logros habilitados en este servidor
       const achievements = await Achievement.find({ 
         guildId, 
         enabled: true 
       }).lean();
 
-      const choices = achievements
-        .filter(ach => 
-          ach.name.toLowerCase().includes(focusedValue) ||
-          ach._id.toString().includes(focusedValue)
-        )
+      logger.info(`Logros encontrados: ${achievements.length}`);
+
+      // Si no hay búsqueda específica, mostrar todos
+      let filtered = achievements;
+      
+      if (focusedValue) {
+        filtered = achievements.filter(ach => {
+          const nameMatch = ach.name.toLowerCase().includes(focusedValue);
+          const idMatch = ach._id.toString().includes(focusedValue);
+          const typeMatch = ach.type.toLowerCase().includes(focusedValue);
+          return nameMatch || idMatch || typeMatch;
+        });
+      }
+
+      // Limitar a 25 resultados
+      const choices = filtered
         .slice(0, 25)
         .map(ach => ({
-          name: `${ach.icon || '🏆'} ${ach.name} (${ach.tiers.length} tiers)`,
+          name: `${ach.icon || '🏆'} ${ach.name} - ${ach.type} (${ach.tiers.length} tiers)`,
           value: ach._id.toString()
         }));
+
+      logger.info(`Opciones de autocomplete: ${choices.length}`);
 
       await interaction.respond(choices);
     } catch (error) {
@@ -74,6 +90,8 @@ export default {
       const targetUser = interaction.options.getUser('usuario') || interaction.user;
       const targetChannel = interaction.options.getChannel('canal') || interaction.channel;
 
+      logger.info(`Ejecutando testlogro: achievement=${achievementId}, tier=${tierNumber}`);
+
       // Verificar que el canal es de texto
       if (!targetChannel.isTextBased()) {
         return await interaction.editReply({
@@ -89,11 +107,14 @@ export default {
       });
 
       if (!achievement) {
+        logger.warn(`Logro no encontrado: ${achievementId}`);
         return await interaction.editReply({
           content: '❌ No se encontró el logro especificado o no pertenece a este servidor.',
           ephemeral: true
         });
       }
+
+      logger.info(`Logro encontrado: ${achievement.name} (${achievement.tiers.length} tiers)`);
 
       // Determinar el tier a mostrar
       let tier;
@@ -109,6 +130,8 @@ export default {
         // Si no se especifica tier, usar el primero
         tier = achievement.tiers.sort((a, b) => a.tier - b.tier)[0];
       }
+
+      logger.info(`Tier seleccionado: ${tier.tier} - ${tier.title}`);
 
       // Obtener configuración de imagen
       const guildConfig = await GuildModel.findOne({ guildId: interaction.guildId }).lean();
@@ -169,6 +192,7 @@ export default {
       logger.info(`Test de logro ejecutado por ${interaction.user.tag}: ${achievement.name} - ${tier.title}`);
     } catch (error) {
       logger.error('Error ejecutando comando testlogro:', error);
+      logger.error('Stack:', error.stack);
       
       const errorMessage = '❌ Hubo un error al generar la notificación de prueba. Verifica que:\n' +
                           '• El logro exista y esté habilitado\n' +

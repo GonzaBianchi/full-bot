@@ -10,6 +10,38 @@ const __dirname = path.dirname(__filename);
 export default {
   name: Events.InteractionCreate,
   async execute(interaction) {
+    // Manejar autocomplete
+    if (interaction.isAutocomplete()) {
+      const commandName = interaction.commandName;
+      
+      try {
+        const commandsPath = path.resolve(__dirname, '../commands');
+        const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+        
+        let commandModule = null;
+        for (const file of commandFiles) {
+          const filePath = path.join(commandsPath, file);
+          const cmd = await import(`file://${filePath}`);
+          if (cmd.default && cmd.default.data && cmd.default.data.name === commandName) {
+            commandModule = cmd.default;
+            break;
+          }
+        }
+
+        if (commandModule && commandModule.autocomplete) {
+          await commandModule.autocomplete(interaction);
+        } else {
+          logger.warn(`Comando ${commandName} no tiene función autocomplete`);
+          await interaction.respond([]);
+        }
+      } catch (error) {
+        logger.error(`Error en autocomplete de /${commandName}:`, error);
+        await interaction.respond([]);
+      }
+      return;
+    }
+
+    // Manejar comandos slash
     if (!interaction.isChatInputCommand()) return;
 
     const commandName = interaction.commandName;
