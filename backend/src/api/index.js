@@ -16,7 +16,7 @@ import guildRoutes from './routes/guilds.js';
 import levelRoutes from './routes/levels.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import messageRoutes from './routes/messages.js';
-import birthdaysRoutes from './routes/birthday.js'; // ← CORREGIDO: birthday.js (singular)
+import birthdaysRoutes from './routes/birthdays.js';
 
 class ApiServer {
   constructor(discordClient) {
