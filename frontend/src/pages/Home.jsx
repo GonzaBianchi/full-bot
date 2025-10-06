@@ -32,6 +32,7 @@ function Home() {
       
       setBotInfo(botRes?.data);
       setAvailable(availRes?.data || { manageable: [], invitables: [] });
+      console.log(availRes?.data);
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
