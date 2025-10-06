@@ -76,11 +76,26 @@ router.post('/:guildId/config/ignored-channels', isAuthenticated, hasGuildPermis
 router.post('/:guildId/config/levelup', isAuthenticated, hasGuildPermission, [
   param('guildId').exists(),
   body('enabled').optional().isBoolean(),
-  body('channelId').optional().isString().isLength({ min: 1 }),
+  body('channelId')
+    .optional({ nullable: true })
+    .custom((value) => {
+      // Aceptar null o undefined (para "mismo canal")
+      if (value === null || value === undefined) {
+        return true;
+      }
+      // Si tiene valor, debe ser un string válido
+      if (typeof value === 'string' && value.trim().length >= 1) {
+        return true;
+      }
+      throw new Error('channelId debe ser un ID de canal válido o null');
+    }),
   body('message').optional().isString().isLength({ min: 1, max: 500 }),
   (req, res, next) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    if (!errors.isEmpty()) {
+      logger.warn('❌ Errores de validación en /levelup:', errors.array());
+      return res.status(400).json({ errors: errors.array() });
+    }
     next();
   }
 ], async (req, res) => {
@@ -94,6 +109,7 @@ router.post('/:guildId/config/levelup', isAuthenticated, hasGuildPermission, [
     if (typeof message !== 'undefined') update.levelUpMessage = message;
 
     const cfg = await GuildModel.findOneAndUpdate({ guildId }, update, { new: true, upsert: true });
+    logger.info(`✅ Configuración de levelup actualizada para guild ${guildId}`);
     res.json({ config: cfg });
   } catch (e) {
     logger.error('Error al actualizar levelup config:', e);
