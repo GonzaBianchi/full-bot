@@ -13,12 +13,32 @@ function Home() {
     load();
   }, []);
 
+  // Detectar cuando la ventana vuelve a tener foco (usuario regresa después de invitar)
+  useEffect(() => {
+    const handleFocus = () => {
+      // Recargar la lista de servidores cuando el usuario regrese de Discord
+      loadAvailableGuilds();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   const loadUser = async () => {
     try {
       const response = await authService.getMe();
       setUser(response.data);
     } catch (error) {
       setUser(null);
+    }
+  };
+
+  const loadAvailableGuilds = async () => {
+    try {
+      const availRes = await guildService.getAvailable();
+      setAvailable(availRes?.data || { manageable: [], invitables: [] });
+    } catch (error) {
+      console.error('Error loading guilds:', error);
     }
   };
 
@@ -254,7 +274,9 @@ function Home() {
                         </div>
                         {user ? (
                           <a 
-                            href={inviteUrlFor('YOUR_CLIENT_ID', g.id)}
+                            href={inviteUrlFor(botInfo?.id || 'YOUR_CLIENT_ID', g.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
                           >
                             <span>Invitar</span>
