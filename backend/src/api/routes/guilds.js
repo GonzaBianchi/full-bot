@@ -296,4 +296,147 @@ router.get('/public/:guildId/info', async (req, res) => {
   }
 });
 
+// ========== CONFIGURACIÓN DE IMÁGENES ==========
+
+// Obtener configuración de imágenes
+router.get('/:guildId/config/images', isAuthenticated, hasGuildPermission, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    let cfg = await GuildModel.findOne({ guildId }).lean();
+    if (!cfg) {
+      cfg = await GuildModel.create({ guildId });
+    }
+
+    res.json({ 
+      images: cfg.images || {
+        rankCard: { url: null, blur: 8, opacity: 0.5 },
+        achievementNotification: { url: null, blur: 6, opacity: 0.7 }
+      }
+    });
+  } catch (error) {
+    logger.error('Error al obtener configuración de imágenes:', error);
+    res.status(500).json({ error: 'Error al obtener configuración' });
+  }
+});
+
+// Actualizar imagen de rank card
+router.post('/:guildId/config/images/rank-card', 
+  isAuthenticated, 
+  hasGuildPermission, 
+  [
+    param('guildId').exists(),
+    body('url').optional().isString().isURL().isLength({ max: 2048 }),
+    body('blur').optional().isInt({ min: 0, max: 20 }),
+    body('opacity').optional().isFloat({ min: 0, max: 1 }),
+    (req, res, next) => {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      next();
+    }
+  ],
+  async (req, res) => {
+    try {
+      const { guildId } = req.params;
+      const { url, blur, opacity } = req.body;
+
+      const update = {};
+      if (url !== undefined) update['images.rankCard.url'] = url;
+      if (blur !== undefined) update['images.rankCard.blur'] = blur;
+      if (opacity !== undefined) update['images.rankCard.opacity'] = opacity;
+
+      const cfg = await GuildModel.findOneAndUpdate(
+        { guildId },
+        { $set: update },
+        { new: true, upsert: true }
+      );
+
+      logger.info(`✅ Imagen de rank card actualizada para guild ${guildId}`);
+      res.json({ images: cfg.images });
+    } catch (error) {
+      logger.error('Error actualizando imagen de rank card:', error);
+      res.status(500).json({ error: 'Error al actualizar configuración' });
+    }
+  }
+);
+
+// Actualizar imagen de notificación de logros
+router.post('/:guildId/config/images/achievement-notification', 
+  isAuthenticated, 
+  hasGuildPermission, 
+  [
+    param('guildId').exists(),
+    body('url').optional().isString().isURL().isLength({ max: 2048 }),
+    body('blur').optional().isInt({ min: 0, max: 20 }),
+    body('opacity').optional().isFloat({ min: 0, max: 1 }),
+    (req, res, next) => {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      next();
+    }
+  ],
+  async (req, res) => {
+    try {
+      const { guildId } = req.params;
+      const { url, blur, opacity } = req.body;
+
+      const update = {};
+      if (url !== undefined) update['images.achievementNotification.url'] = url;
+      if (blur !== undefined) update['images.achievementNotification.blur'] = blur;
+      if (opacity !== undefined) update['images.achievementNotification.opacity'] = opacity;
+
+      const cfg = await GuildModel.findOneAndUpdate(
+        { guildId },
+        { $set: update },
+        { new: true, upsert: true }
+      );
+
+      logger.info(`✅ Imagen de notificación de logros actualizada para guild ${guildId}`);
+      res.json({ images: cfg.images });
+    } catch (error) {
+      logger.error('Error actualizando imagen de notificación:', error);
+      res.status(500).json({ error: 'Error al actualizar configuración' });
+    }
+  }
+);
+
+// Resetear configuración de imágenes
+router.delete('/:guildId/config/images/:type', 
+  isAuthenticated, 
+  hasGuildPermission,
+  async (req, res) => {
+    try {
+      const { guildId, type } = req.params;
+
+      if (!['rank-card', 'achievement-notification'].includes(type)) {
+        return res.status(400).json({ error: 'Tipo de imagen inválido' });
+      }
+
+      const field = type === 'rank-card' ? 'rankCard' : 'achievementNotification';
+      
+      const update = {
+        [`images.${field}.url`]: null,
+        [`images.${field}.blur`]: type === 'rank-card' ? 8 : 6,
+        [`images.${field}.opacity`]: type === 'rank-card' ? 0.5 : 0.7
+      };
+
+      const cfg = await GuildModel.findOneAndUpdate(
+        { guildId },
+        { $set: update },
+        { new: true, upsert: true }
+      );
+
+      logger.info(`✅ Configuración de imagen ${type} reseteada para guild ${guildId}`);
+      res.json({ images: cfg.images });
+    } catch (error) {
+      logger.error('Error reseteando configuración de imagen:', error);
+      res.status(500).json({ error: 'Error al resetear configuración' });
+    }
+  }
+);
+
 export default router;

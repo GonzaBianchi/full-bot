@@ -1,29 +1,45 @@
 import mongoose from 'mongoose';
 
 const GuildSchema = new mongoose.Schema({
-  guildId: { type: String, required: true, unique: true },
-  xpMultiplier: { type: Number, default: 1 },
-  ignoredChannels: { type: [String], default: [] },
-  levelRoles: [{ level: Number, roleId: String }],
+  guildId: { type: String, required: true, unique: true, index: true },
   
-  // Modo de roles: true = apilar roles (mantener todos), false = solo el más alto
-  stackRoles: { type: Boolean, default: false },
+  // XP y niveles
+  xpMultiplier: { type: Number, default: 1.0 },
+  ignoredChannels: [{ type: String }],
   
-  leaderboardEnabled: { type: Boolean, default: true },
-  
-  // Notificaciones de leveo
+  // Notificaciones de level up
   levelUpEnabled: { type: Boolean, default: true },
   levelUpChannelId: { type: String, default: null },
-  levelUpMessage: { type: String, default: '🎉 {mention} ha subido al nivel {level}!' },
+  levelUpMessage: { type: String, default: '🎉 {mention} ha subido al nivel **{level}**!' },
   
-  // Auto-roles para nuevos miembros
-  autoRoles: {
-    enabled: { type: Boolean, default: false },
-    roles: { type: [String], default: [] }, // IDs de roles por defecto
-    restoreLevelRoles: { type: Boolean, default: true }, // Restaurar roles de nivel si ya tenía XP
-    welcomeChannelId: { type: String, default: null }, // Canal para mensaje de bienvenida (opcional)
-    welcomeMessage: { type: String, default: '👋 ¡Bienvenido {mention} al servidor!' }
-  }
-}, { timestamps: true });
+  // Roles de nivel
+  levelRoles: [{
+    level: { type: Number, required: true },
+    roleId: { type: String, required: true }
+  }],
+  
+  // ========== NUEVO: Configuración de imágenes ==========
+  images: {
+    // Banner para la rank card
+    rankCard: {
+      url: { type: String, default: null }, // URL de la imagen
+      blur: { type: Number, default: 8, min: 0, max: 20 }, // Intensidad del blur
+      opacity: { type: Number, default: 0.5, min: 0, max: 1 } // Opacidad del overlay
+    },
+    
+    // Imagen para notificaciones de logros
+    achievementNotification: {
+      url: { type: String, default: null },
+      blur: { type: Number, default: 6, min: 0, max: 20 },
+      opacity: { type: Number, default: 0.7, min: 0, max: 1 }
+    }
+  },
+  // ======================================================
+  
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+GuildSchema.index({ guildId: 1 });
 
 export default mongoose.models.Guild || mongoose.model('Guild', GuildSchema);
