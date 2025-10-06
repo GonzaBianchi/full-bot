@@ -345,7 +345,7 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
       },
       {
         guildId,
-        type: 'booster',
+        type: 'boost',
         name: '🚀 Booster',
         description: 'Da boost al servidor',
         icon: '🚀',
