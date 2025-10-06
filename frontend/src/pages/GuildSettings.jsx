@@ -1,23 +1,25 @@
-// frontend/src/pages/GuildSettings.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useGuildConfig } from '../hooks/useGuildConfig';
 import { useGeneralSettings } from '../hooks/useGeneralSettings';
 import { useNotificationSettings } from '../hooks/useNotificationSettings';
 import { useRoleSettings } from '../hooks/useRoleSettings';
+import { useAutoRoles } from '../hooks/useAutoRoles';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Sidebar } from '../components/guild-settings/Sidebar';
 import { XPSystemSettings } from '../components/guild-settings/XPSystemSettings';
 import { LeaderboardSection } from '../components/guild-settings/LeaderboardSection';
-import RoleMenus from './RoleMenus';
-import { useAutoRoles } from '../hooks/useAutoRoles';
 import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSettings';
 import { AchievementsSettings } from '../components/guild-settings/AchievementsSettings';
+import RoleMenus from './RoleMenus';
+import { guildService } from '../services/api';
 
 function GuildSettings() {
   const { guildId } = useParams();
   const [activeSection, setActiveSection] = useState('xp-system');
+  const [guilds, setGuilds] = useState([]);
+  const [guildsLoading, setGuildsLoading] = useState(true);
 
   // Cargar configuración base
   const { config, channels, roles, loading } = useGuildConfig(guildId);
@@ -28,6 +30,34 @@ function GuildSettings() {
   const roleSettings = useRoleSettings(guildId, config);
   const autoRolesSettings = useAutoRoles(guildId, config);
 
+  // Cargar lista de servidores disponibles
+  useEffect(() => {
+    loadGuilds();
+  }, []);
+
+  // Recargar configuración cuando cambie el guildId
+  useEffect(() => {
+    if (guildId) {
+      // La recarga ya se maneja automáticamente por useGuildConfig
+      // pero puedes agregar lógica adicional aquí si es necesario
+      setActiveSection('xp-system'); // Resetear a la primera sección
+    }
+  }, [guildId]);
+
+  const loadGuilds = async () => {
+    setGuildsLoading(true);
+    try {
+      const response = await guildService.getAvailable();
+      // Solo los servidores donde el usuario es admin y el bot está presente
+      setGuilds(response.data.manageable || []);
+    } catch (error) {
+      console.error('Error loading guilds:', error);
+      setGuilds([]);
+    } finally {
+      setGuildsLoading(false);
+    }
+  };
+
   // Mapa de cambios sin guardar por sección
   const hasChanges = {
     'xp-system': generalSettings.hasChanges || notificationSettings.hasChanges || roleSettings.hasChanges,
@@ -37,7 +67,7 @@ function GuildSettings() {
     leaderboard: false
   };
 
-  if (loading) {
+  if (loading || guildsLoading) {
     return <LoadingSpinner text="Cargando configuración..." />;
   }
 
@@ -50,6 +80,7 @@ function GuildSettings() {
           activeSection={activeSection} 
           setActiveSection={setActiveSection}
           hasChanges={hasChanges}
+          guilds={guilds}
         />
 
         <main className="flex-1 p-8">
