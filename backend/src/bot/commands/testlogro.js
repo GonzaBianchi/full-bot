@@ -131,13 +131,14 @@ export default {
         tier = achievement.tiers.sort((a, b) => a.tier - b.tier)[0];
       }
 
-      logger.info(`Tier seleccionado: ${tier.tier} - ${tier.title}`);
+      logger.info(`Tier seleccionado: ${tier.tier} - ${tier.title} (Meta: ${tier.target})`);
 
       // Obtener configuración de imagen
       const guildConfig = await GuildModel.findOne({ guildId: interaction.guildId }).lean();
       const imageConfig = guildConfig?.images?.achievementNotification || {};
 
       // Generar la imagen de notificación
+      logger.info('Generando imagen de logro...');
       const imageBuffer = await generateAchievementNotification({
         user: targetUser,
         achievement: {
@@ -179,17 +180,47 @@ export default {
         allowedMentions: { users: [targetUser.id] }
       });
 
+      // Formato de la meta para el mensaje de confirmación
+      let targetFormatted = '';
+      switch (achievement.type) {
+        case 'messages':
+          targetFormatted = `${tier.target.toLocaleString()} mensajes`;
+          break;
+        case 'reactions':
+          targetFormatted = `${tier.target.toLocaleString()} reacciones recibidas`;
+          break;
+        case 'reactions_given':
+          targetFormatted = `${tier.target.toLocaleString()} reacciones dadas`;
+          break;
+        case 'voice_time':
+          const hours = Math.floor(tier.target / 3600);
+          const minutes = Math.floor((tier.target % 3600) / 60);
+          if (hours > 0) {
+            targetFormatted = `${hours}h ${minutes}m en voz`;
+          } else {
+            targetFormatted = `${minutes}m en voz`;
+          }
+          break;
+        case 'boost':
+          targetFormatted = 'Boostear el servidor';
+          break;
+        default:
+          targetFormatted = `${tier.target.toLocaleString()}`;
+      }
+
       // Confirmar al usuario que ejecutó el comando
       await interaction.editReply({
         content: `✅ Notificación de prueba enviada en ${targetChannel}!\n\n` +
                  `**Logro:** ${achievement.icon} ${achievement.name}\n` +
+                 `**Tipo:** ${achievement.type}\n` +
                  `**Tier:** ${tier.emoji || '🏆'} ${tier.title} (${tier.tier}/${achievement.tiers.length})\n` +
+                 `**Meta:** ${targetFormatted}\n` +
                  `**Usuario:** ${targetUser.tag}\n` +
                  `**Imagen personalizada:** ${imageConfig.url ? '✅ Sí' : '❌ No (usando predeterminada)'}`,
         ephemeral: true
       });
 
-      logger.info(`Test de logro ejecutado por ${interaction.user.tag}: ${achievement.name} - ${tier.title}`);
+      logger.info(`Test de logro ejecutado exitosamente por ${interaction.user.tag}: ${achievement.name} - ${tier.title}`);
     } catch (error) {
       logger.error('Error ejecutando comando testlogro:', error);
       logger.error('Stack:', error.stack);
