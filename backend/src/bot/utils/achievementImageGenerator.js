@@ -182,7 +182,7 @@ export async function generateAchievementNotification({
   const targetText = formatTarget(achievement.type, tier.target);
   ctx.font = 'bold 26px sans-serif';
   ctx.fillStyle = '#7289DA';
-  ctx.fillText(`🎯 Meta: ${targetText}`, textX, textStartY + 165);
+  ctx.fillText(`Meta: ${targetText}`, textX, textStartY + 165);
 
   // Descripción del tier
   if (tier.description) {
