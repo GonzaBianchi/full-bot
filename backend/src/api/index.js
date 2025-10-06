@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js';
 import guildRoutes from './routes/guilds.js';
 import levelRoutes from './routes/levels.js';
 import leaderboardRoutes from './routes/leaderboard.js';
+import messageRoutes from './routes/messages.js'; // ← NUEVA RUTA
 
 class ApiServer {
   constructor(discordClient) {
@@ -169,9 +170,9 @@ class ApiServer {
     });
 
     // ========== Rutas de la API ==========
-    // IMPORTANTE: guildRoutes ya incluye achievements, autoRoles y roleMenus internamente
     this.app.use('/api/auth', authRoutes);
-    this.app.use('/api/guilds', guildRoutes); // ← Incluye achievements, auto-roles y role-menus
+    this.app.use('/api/guilds', guildRoutes);
+    this.app.use('/api/guilds', messageRoutes); // ← NUEVA RUTA DE MENSAJES
     this.app.use('/api/levels', levelRoutes);
     this.app.use('/api/leaderboard', leaderboardRoutes);
     // ====================================

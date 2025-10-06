@@ -12,6 +12,7 @@ import { XPSystemSettings } from '../components/guild-settings/XPSystemSettings'
 import { LeaderboardSection } from '../components/guild-settings/LeaderboardSection';
 import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSettings';
 import { AchievementsSettings } from '../components/guild-settings/AchievementsSettings';
+import { CustomMessages } from '../components/guild-settings/CustomMessages';
 import RoleMenus from './RoleMenus';
 import { guildService } from '../services/api';
 
@@ -63,6 +64,7 @@ function GuildSettings() {
     'xp-system': generalSettings.hasChanges || notificationSettings.hasChanges || roleSettings.hasChanges,
     'auto-roles': autoRolesSettings.hasChanges,
     'role-menus': false,
+    'custom-messages': false,
     achievements: false,
     leaderboard: false
   };
@@ -113,6 +115,13 @@ function GuildSettings() {
               <AchievementsSettings 
                 guildId={guildId} 
                 roles={roles}
+                channels={channels}
+              />
+            )}
+
+            {activeSection === 'custom-messages' && (
+              <CustomMessages 
+                guildId={guildId} 
                 channels={channels}
               />
             )}

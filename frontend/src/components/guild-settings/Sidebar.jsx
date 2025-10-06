@@ -1,4 +1,4 @@
-import { ArrowLeft, Zap, UserPlus, Trophy, Shield, BarChart3, ChevronDown, Check } from 'lucide-react';
+import { ArrowLeft, Zap, UserPlus, Trophy, Shield, BarChart3, MessageSquare, ChevronDown, Check } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 
@@ -16,6 +16,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
     { id: 'auto-roles', label: 'Auto-Roles', icon: UserPlus },
     { id: 'achievements', label: 'Logros', icon: Trophy },
     { id: 'role-menus', label: 'Role Menus', icon: Shield },
+    { id: 'custom-messages', label: 'Mensajes', icon: MessageSquare },
     { id: 'leaderboard', label: 'Leaderboard', icon: BarChart3 }
   ];
 
