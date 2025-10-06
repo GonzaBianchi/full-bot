@@ -1,3 +1,4 @@
+// frontend/src/pages/GuildSettings.jsx
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -13,6 +14,7 @@ import { LeaderboardSection } from '../components/guild-settings/LeaderboardSect
 import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSettings';
 import { AchievementsSettings } from '../components/guild-settings/AchievementsSettings';
 import { CustomMessages } from '../components/guild-settings/CustomMessages';
+import { MediaFilterSettings } from '../components/guild-settings/MediaFilterSettings'; // ← IMPORTAR
 import RoleMenus from './RoleMenus';
 import { guildService } from '../services/api';
 
@@ -39,9 +41,7 @@ function GuildSettings() {
   // Recargar configuración cuando cambie el guildId
   useEffect(() => {
     if (guildId) {
-      // La recarga ya se maneja automáticamente por useGuildConfig
-      // pero puedes agregar lógica adicional aquí si es necesario
-      setActiveSection('xp-system'); // Resetear a la primera sección
+      setActiveSection('xp-system');
     }
   }, [guildId]);
 
@@ -49,7 +49,6 @@ function GuildSettings() {
     setGuildsLoading(true);
     try {
       const response = await guildService.getAvailable();
-      // Solo los servidores donde el usuario es admin y el bot está presente
       setGuilds(response.data.manageable || []);
     } catch (error) {
       console.error('Error loading guilds:', error);
@@ -65,6 +64,7 @@ function GuildSettings() {
     'auto-roles': autoRolesSettings.hasChanges,
     'role-menus': false,
     'custom-messages': false,
+    'media-filter': false, // ← AGREGAR
     achievements: false,
     leaderboard: false
   };
@@ -125,6 +125,17 @@ function GuildSettings() {
                 channels={channels}
               />
             )}
+
+            {/* ========== NUEVA SECCIÓN ========== */}
+            {activeSection === 'media-filter' && (
+              <MediaFilterSettings 
+                guildId={guildId} 
+                config={config}
+                channels={channels}
+                roles={roles}
+              />
+            )}
+            {/* =================================== */}
 
             {activeSection === 'leaderboard' && (
               <LeaderboardSection guildId={guildId} />

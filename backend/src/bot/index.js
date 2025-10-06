@@ -8,6 +8,7 @@ import { xpForLevel } from './utils/levelSystem.js';
 import registerCommands from './commands/registerCommands.js';
 import RoleMenu from '../models/RoleMenu.js';
 import setupAchievementTracking from './events/achievementTracking.js';
+import setupMediaFilter from './events/mediaFilterHandler.js'; 
 
 dotenv.config();
 
@@ -124,6 +125,13 @@ class BotApp {
         logger.info('✅ Achievement tracking configurado');
       } catch (e) {
         logger.error('❌ Error configurando achievement tracking:', e);
+      }
+
+      try {
+        setupMediaFilter(this.client);
+        logger.info('✅ Media filter configurado');
+      } catch (e) {
+        logger.error('❌ Error configurando media filter:', e);
       }
       // =========================================================
 

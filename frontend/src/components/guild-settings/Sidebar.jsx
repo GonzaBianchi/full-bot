@@ -1,4 +1,5 @@
-import { ArrowLeft, Zap, UserPlus, Trophy, Shield, BarChart3, MessageSquare, ChevronDown, Check } from 'lucide-react';
+// frontend/src/components/guild-settings/Sidebar.jsx
+import { ArrowLeft, Zap, UserPlus, Trophy, Shield, BarChart3, MessageSquare, ChevronDown, Check, Film } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 
@@ -17,6 +18,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
     { id: 'achievements', label: 'Logros', icon: Trophy },
     { id: 'role-menus', label: 'Role Menus', icon: Shield },
     { id: 'custom-messages', label: 'Mensajes', icon: MessageSquare },
+    { id: 'media-filter', label: 'Filtro Multimedia', icon: Film }, // ← NUEVA SECCIÓN
     { id: 'leaderboard', label: 'Leaderboard', icon: BarChart3 }
   ];
 
@@ -41,7 +43,6 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
 
   const handleGuildChange = (newGuildId) => {
     if (newGuildId !== guildId) {
-      // Navegar al mismo tipo de página pero con el nuevo guild
       navigate(`/guild/${newGuildId}`);
     }
     setIsDropdownOpen(false);

@@ -1,3 +1,4 @@
+// frontend/src/services/api.js
 import axios from 'axios';
 
 const api = axios.create({
@@ -23,10 +24,9 @@ export const guildService = {
   updateLevelRoles: (guildId, roles) => api.post(`/api/guilds/${guildId}/config/level-roles`, { roles }),
   getResources: (guildId) => api.get(`/api/guilds/${guildId}/resources`),
   getPublicInfo: (guildId) => api.get(`/api/guilds/public/${encodeURIComponent(guildId)}/info`),
-    sendMessage: (guildId, messageData) => api.post(`/guilds/${guildId}/messages/send`, messageData),
+  sendMessage: (guildId, messageData) => api.post(`/guilds/${guildId}/messages/send`, messageData),
 };
 
-// frontend/src/services/api.js - Actualización
 export const leaderboardService = {
   getPublic: (guildId, page = 1, limit = 10) => 
     api.get(`/api/leaderboard/public/${encodeURIComponent(guildId)}?page=${page}&limit=${limit}`),
@@ -50,5 +50,13 @@ export const imageService = {
   updateAchievementNotification: (guildId, payload) => api.post(`/api/guilds/${guildId}/config/images/achievement-notification`, payload),
   resetImage: (guildId, type) => api.delete(`/api/guilds/${guildId}/config/images/${type}`)
 };
+
+// ========== NUEVO: Servicio para filtro multimedia ==========
+export const mediaFilterService = {
+  getConfig: (guildId) => api.get(`/api/guilds/${guildId}/config/media-filter`),
+  update: (guildId, payload) => api.post(`/api/guilds/${guildId}/config/media-filter`, payload),
+  reset: (guildId) => api.delete(`/api/guilds/${guildId}/config/media-filter`)
+};
+// ============================================================
 
 export default api;

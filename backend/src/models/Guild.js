@@ -18,23 +18,37 @@ const GuildSchema = new mongoose.Schema({
     roleId: { type: String, required: true }
   }],
   
-  // ========== NUEVO: Configuración de imágenes ==========
+  // Configuración de imágenes
   images: {
-    // Banner para la rank card
     rankCard: {
-      url: { type: String, default: null }, // URL de la imagen
-      blur: { type: Number, default: 8, min: 0, max: 20 }, // Intensidad del blur
-      opacity: { type: Number, default: 0.5, min: 0, max: 1 } // Opacidad del overlay
+      url: { type: String, default: null },
+      blur: { type: Number, default: 8, min: 0, max: 20 },
+      opacity: { type: Number, default: 0.5, min: 0, max: 1 }
     },
-    
-    // Imagen para notificaciones de logros
     achievementNotification: {
       url: { type: String, default: null },
       blur: { type: Number, default: 6, min: 0, max: 20 },
       opacity: { type: Number, default: 0.7, min: 0, max: 1 }
     }
   },
-  // ======================================================
+  
+  // ========== NUEVO: Filtro de Multimedia ==========
+  mediaFilter: {
+    enabled: { type: Boolean, default: false },
+    sourceChannels: [{ type: String }], // Canales de origen donde capturar multimedia
+    targetChannelId: { type: String, default: null }, // Canal destino donde reenviar
+    types: {
+      images: { type: Boolean, default: true },
+      videos: { type: Boolean, default: true },
+      gifs: { type: Boolean, default: true }
+    },
+    includeEmbeds: { type: Boolean, default: false }, // Incluir embeds de links (YouTube, etc.)
+    customMessage: { 
+      type: String, 
+      default: '📎 **{author}** compartió multimedia desde #{channel}' 
+    }
+  },
+  // ================================================
   
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

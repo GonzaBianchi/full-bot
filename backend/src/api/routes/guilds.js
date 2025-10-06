@@ -7,6 +7,7 @@ import UserModel from '../../models/User.js';
 import roleMenusRoutes from './roleMenus.js';
 import autoRolesRoutes from './autoRoles.js';
 import achievementsRoutes from './achievements.js';
+import mediaFilterRoutes from './mediaFilter.js';
 
 const router = express.Router();
 
@@ -14,6 +15,7 @@ const router = express.Router();
 router.use('/', roleMenusRoutes);
 router.use('/', autoRolesRoutes);
 router.use('/', achievementsRoutes);
+router.use('/', mediaFilterRoutes); 
 
 // Obtener configuración de un guild
 router.get('/:guildId/config', isAuthenticated, hasGuildPermission, async (req, res) => {
