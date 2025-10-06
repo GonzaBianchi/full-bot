@@ -1,19 +1,15 @@
-// frontend/src/components/guild-settings/Sidebar.jsx
-import { ArrowLeft, Settings, Bell, Award, Shield, BarChart3, UserPlus, Trophy, Image } from 'lucide-react';
+import { ArrowLeft, Zap, UserPlus, Trophy, Shield, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function Sidebar({ activeSection, setActiveSection, hasChanges }) {
   const navigate = useNavigate();
 
   const menuItems = [
-    { id: 'general', label: 'General', icon: Settings },
-    { id: 'notifications', label: 'Notificaciones', icon: Bell },
-    { id: 'roles', label: 'Roles de Nivel', icon: Award },
+    { id: 'xp-system', label: 'Sistema XP', icon: Zap },
     { id: 'auto-roles', label: 'Auto-Roles', icon: UserPlus },
-    { id: 'achievements', label: 'Logros', icon: Trophy }, // ← NUEVO
+    { id: 'achievements', label: 'Logros', icon: Trophy },
     { id: 'role-menus', label: 'Role Menus', icon: Shield },
-    { id: 'leaderboard', label: 'Leaderboard', icon: BarChart3 },
-    { id: 'images', label: 'Imágenes', icon: Image }
+    { id: 'leaderboard', label: 'Leaderboard', icon: BarChart3 }
   ];
 
   return (

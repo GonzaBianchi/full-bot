@@ -1,4 +1,4 @@
-// frontend/src/pages/GuildSettings.jsx (REFACTORIZADO)
+// frontend/src/pages/GuildSettings.jsx
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -8,19 +8,16 @@ import { useNotificationSettings } from '../hooks/useNotificationSettings';
 import { useRoleSettings } from '../hooks/useRoleSettings';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Sidebar } from '../components/guild-settings/Sidebar';
-import { GeneralSettings } from '../components/guild-settings/GeneralSettings';
-import { NotificationSettings } from '../components/guild-settings/NotificationSettings';
-import { RoleSettings } from '../components/guild-settings/RoleSettings';
+import { XPSystemSettings } from '../components/guild-settings/XPSystemSettings';
 import { LeaderboardSection } from '../components/guild-settings/LeaderboardSection';
 import RoleMenus from './RoleMenus';
 import { useAutoRoles } from '../hooks/useAutoRoles';
 import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSettings';
 import { AchievementsSettings } from '../components/guild-settings/AchievementsSettings';
-import { ImageBannerSettings } from '../components/guild-settings/ImageBannerSettings';
 
 function GuildSettings() {
   const { guildId } = useParams();
-  const [activeSection, setActiveSection] = useState('general');
+  const [activeSection, setActiveSection] = useState('xp-system');
 
   // Cargar configuración base
   const { config, channels, roles, loading } = useGuildConfig(guildId);
@@ -33,10 +30,8 @@ function GuildSettings() {
 
   // Mapa de cambios sin guardar por sección
   const hasChanges = {
-    general: generalSettings.hasChanges,
-    notifications: notificationSettings.hasChanges,
-    roles: roleSettings.hasChanges,
-    'auto-roles': autoRolesSettings.hasChanges, // ← NUEVO
+    'xp-system': generalSettings.hasChanges || notificationSettings.hasChanges || roleSettings.hasChanges,
+    'auto-roles': autoRolesSettings.hasChanges,
     'role-menus': false,
     achievements: false,
     leaderboard: false
@@ -59,27 +54,12 @@ function GuildSettings() {
 
         <main className="flex-1 p-8">
           <div className="max-w-4xl">
-            {activeSection === 'general' && (
-              <GeneralSettings 
+            {activeSection === 'xp-system' && (
+              <XPSystemSettings 
                 guildId={guildId} 
                 config={config} 
-                channels={channels} 
-              />
-            )}
-
-            {activeSection === 'notifications' && (
-              <NotificationSettings 
-                guildId={guildId} 
-                config={config} 
-                channels={channels} 
-              />
-            )}
-
-            {activeSection === 'roles' && (
-              <RoleSettings 
-                guildId={guildId} 
-                config={config} 
-                roles={roles} 
+                channels={channels}
+                roles={roles}
               />
             )}
 
@@ -104,19 +84,6 @@ function GuildSettings() {
                 roles={roles}
                 channels={channels}
               />
-            )}
-
-            {activeSection === 'images' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">🎨 Configuración de Imágenes</h2>
-                  <p className="text-gray-400 mb-6">Personaliza los banners de rank cards y notificaciones de logros</p>
-                </div>
-                
-                <ImageBannerSettings guildId={guildId} type="rank-card" />
-                <div className="my-8 border-t border-gray-700"></div>
-                <ImageBannerSettings guildId={guildId} type="achievement-notification" />
-              </div>
             )}
 
             {activeSection === 'leaderboard' && (
