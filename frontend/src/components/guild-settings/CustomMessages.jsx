@@ -101,14 +101,6 @@ export function CustomMessages({ guildId, channels }) {
       
       toast.success('Mensaje enviado correctamente');
       resetForm();
-      
-      // Opcional: abrir el mensaje en Discord
-      if (response.data.message?.url) {
-        const shouldOpen = window.confirm('¿Quieres abrir el mensaje en Discord?');
-        if (shouldOpen) {
-          window.open(response.data.message.url, '_blank');
-        }
-      }
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMsg = error.response?.data?.error || error.response?.data?.details || 'Error al enviar el mensaje';
