@@ -350,7 +350,7 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
       {
         guildId,
         type: 'messages',
-        name: '💬 Mensajero',
+        name: 'Mensajero',
         description: 'Envía mensajes en el servidor',
         icon: '💬',
         tiers: [
@@ -370,7 +370,7 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
       {
         guildId,
         type: 'reactions',
-        name: '⭐ Popular',
+        name: 'Popular',
         description: 'Recibe reacciones en tus mensajes',
         icon: '⭐',
         tiers: [
@@ -389,7 +389,7 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
       {
         guildId,
         type: 'voice_time',
-        name: '🎙️ Vocal',
+        name: 'Vocal',
         description: 'Pasa tiempo en canales de voz',
         icon: '🎙️',
         tiers: [
@@ -409,7 +409,7 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
       {
         guildId,
         type: 'boost',
-        name: '🚀 Booster',
+        name: 'Booster',
         description: 'Da boost al servidor',
         icon: '🚀',
         tiers: [
@@ -425,7 +425,7 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
       {
         guildId,
         type: 'reactions_given',
-        name: '👍 Entusiasta',
+        name: 'Entusiasta',
         description: 'Añade reacciones a mensajes de otros',
         icon: '👍',
         tiers: [

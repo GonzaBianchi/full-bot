@@ -175,14 +175,14 @@ export async function generateAchievementNotification({
   } else {
     ctx.font = 'bold 34px sans-serif';
     ctx.fillStyle = tierColor;
-    ctx.fillText(`${tier.emoji || '⭐'} ${tier.title}`, textX, textStartY + 118);
+    ctx.fillText(tier.title, textX, textStartY + 118);
   }
 
   // Meta alcanzada
   const targetText = formatTarget(achievement.type, tier.target);
   ctx.font = 'bold 26px sans-serif';
   ctx.fillStyle = '#7289DA';
-  ctx.fillText(`Meta: ${targetText}`, textX, textStartY + 165);
+  ctx.fillText(targetText, textX, textStartY + 165);
 
   // Descripción del tier
   if (tier.description) {

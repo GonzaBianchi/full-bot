@@ -8,16 +8,18 @@ import { InfoAlert } from '../ui/InfoAlert';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 
-export function BirthdaySettings({ guildId, config, channels, roles }) {
-  const [settings, setSettings] = useState({
-    enabled: false,
-    channelId: null,
-    message: '🎂 ¡Feliz cumpleaños {mention}! 🎉 ¡Que tengas un día increíble!',
-    mentionRole: null,
-    embedEnabled: true,
-    embedColor: '#FF69B4'
-  });
+// ========== Configuración por defecto ==========
+const DEFAULT_SETTINGS = {
+  enabled: false,
+  channelId: null,
+  message: '🎂 ¡Feliz cumpleaños {mention}! 🎉 ¡Que tengas un día increíble!',
+  mentionRole: null,
+  embedEnabled: true,
+  embedColor: '#FF69B4'
+};
 
+export function BirthdaySettings({ guildId, config, channels, roles }) {
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [originalSettings, setOriginalSettings] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -30,12 +32,29 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
     setLoading(true);
     try {
       const response = await api.get(`/api/guilds/${guildId}/config/birthdays`);
-      const birthdayConfig = response.data.birthdays || settings;
-      setSettings(birthdayConfig);
-      setOriginalSettings(birthdayConfig);
+      
+      // ========== FIX: Validar que la respuesta tenga la estructura correcta ==========
+      const birthdayConfig = response.data?.birthdays || DEFAULT_SETTINGS;
+      
+      // Asegurar que todos los campos necesarios existan
+      const validatedConfig = {
+        enabled: birthdayConfig.enabled ?? DEFAULT_SETTINGS.enabled,
+        channelId: birthdayConfig.channelId ?? DEFAULT_SETTINGS.channelId,
+        message: birthdayConfig.message || DEFAULT_SETTINGS.message,
+        mentionRole: birthdayConfig.mentionRole ?? DEFAULT_SETTINGS.mentionRole,
+        embedEnabled: birthdayConfig.embedEnabled ?? DEFAULT_SETTINGS.embedEnabled,
+        embedColor: birthdayConfig.embedColor || DEFAULT_SETTINGS.embedColor
+      };
+      
+      setSettings(validatedConfig);
+      setOriginalSettings(validatedConfig);
+      // ============================================================================
     } catch (error) {
       console.error('Error loading birthday settings:', error);
       toast.error('Error al cargar configuración de cumpleaños');
+      // En caso de error, usar valores por defecto
+      setSettings(DEFAULT_SETTINGS);
+      setOriginalSettings(DEFAULT_SETTINGS);
     } finally {
       setLoading(false);
     }
@@ -44,15 +63,40 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
 
   const handleSave = async () => {
+    // Validar que el canal esté seleccionado si está habilitado
+    if (settings.enabled && !settings.channelId) {
+      toast.error('Debes seleccionar un canal de cumpleaños');
+      return;
+    }
+
     setSaving(true);
     try {
       const response = await api.post(`/api/guilds/${guildId}/config/birthdays`, settings);
-      setSettings(response.data.birthdays);
-      setOriginalSettings(response.data.birthdays);
-      toast.success('Configuración de cumpleaños guardada');
+      
+      // ========== FIX: Validar respuesta antes de actualizar estado ==========
+      if (response.data && response.data.birthdays) {
+        const updatedConfig = {
+          enabled: response.data.birthdays.enabled ?? settings.enabled,
+          channelId: response.data.birthdays.channelId ?? settings.channelId,
+          message: response.data.birthdays.message || settings.message,
+          mentionRole: response.data.birthdays.mentionRole ?? settings.mentionRole,
+          embedEnabled: response.data.birthdays.embedEnabled ?? settings.embedEnabled,
+          embedColor: response.data.birthdays.embedColor || settings.embedColor
+        };
+        
+        setSettings(updatedConfig);
+        setOriginalSettings(updatedConfig);
+        toast.success('✅ Configuración de cumpleaños guardada');
+      } else {
+        // Si la respuesta no tiene la estructura esperada, mantener settings actuales
+        setOriginalSettings(settings);
+        toast.success('✅ Configuración guardada');
+      }
+      // ======================================================================
     } catch (error) {
       console.error('Error saving birthday settings:', error);
-      toast.error('Error al guardar configuración');
+      const errorMsg = error.response?.data?.error || 'Error al guardar configuración';
+      toast.error(errorMsg);
     } finally {
       setSaving(false);
     }
@@ -64,9 +108,27 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
     setSaving(true);
     try {
       const response = await api.delete(`/api/guilds/${guildId}/config/birthdays`);
-      setSettings(response.data.birthdays);
-      setOriginalSettings(response.data.birthdays);
-      toast.success('Configuración reseteada');
+      
+      // ========== FIX: Validar respuesta ==========
+      if (response.data && response.data.birthdays) {
+        const resetConfig = {
+          enabled: response.data.birthdays.enabled ?? DEFAULT_SETTINGS.enabled,
+          channelId: response.data.birthdays.channelId ?? DEFAULT_SETTINGS.channelId,
+          message: response.data.birthdays.message || DEFAULT_SETTINGS.message,
+          mentionRole: response.data.birthdays.mentionRole ?? DEFAULT_SETTINGS.mentionRole,
+          embedEnabled: response.data.birthdays.embedEnabled ?? DEFAULT_SETTINGS.embedEnabled,
+          embedColor: response.data.birthdays.embedColor || DEFAULT_SETTINGS.embedColor
+        };
+        
+        setSettings(resetConfig);
+        setOriginalSettings(resetConfig);
+      } else {
+        setSettings(DEFAULT_SETTINGS);
+        setOriginalSettings(DEFAULT_SETTINGS);
+      }
+      // ==========================================
+      
+      toast.success('✅ Configuración reseteada');
     } catch (error) {
       console.error('Error resetting birthday settings:', error);
       toast.error('Error al resetear configuración');
@@ -159,10 +221,11 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
 
           {/* Canal de Cumpleaños */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="birthday-channel" className="block text-sm font-medium text-gray-300 mb-2">
               Canal de cumpleaños
             </label>
             <select
+              id="birthday-channel"
               value={settings.channelId || ''}
               onChange={(e) => setSettings({ ...settings, channelId: e.target.value || null })}
               disabled={!settings.enabled}
@@ -182,10 +245,11 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
 
           {/* Mensaje Personalizado */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="birthday-message" className="block text-sm font-medium text-gray-300 mb-2">
               Mensaje de cumpleaños
             </label>
             <textarea
+              id="birthday-message"
               value={settings.message}
               onChange={(e) => setSettings({ ...settings, message: e.target.value })}
               disabled={!settings.enabled}
@@ -199,17 +263,18 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
                 Placeholders: {'{mention}'}, {'{username}'}, {'{server}'}
               </p>
               <p className="text-xs text-gray-500">
-                {settings.message.length}/1000
+                {settings.message?.length || 0}/1000
               </p>
             </div>
           </div>
 
           {/* Rol a Mencionar */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="birthday-role" className="block text-sm font-medium text-gray-300 mb-2">
               Mencionar rol (opcional)
             </label>
             <select
+              id="birthday-role"
               value={settings.mentionRole || ''}
               onChange={(e) => setSettings({ ...settings, mentionRole: e.target.value || null })}
               disabled={!settings.enabled}
@@ -266,12 +331,13 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
           {/* Color del Embed */}
           {settings.embedEnabled && (
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label htmlFor="embed-color" className="block text-sm font-medium text-gray-300 mb-2">
                 Color del embed
               </label>
               <div className="flex items-center space-x-3">
                 <input
                   type="color"
+                  id="embed-color-picker"
                   value={settings.embedColor}
                   onChange={(e) => setSettings({ ...settings, embedColor: e.target.value })}
                   disabled={!settings.enabled}
@@ -279,6 +345,7 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
                 />
                 <input
                   type="text"
+                  id="embed-color"
                   value={settings.embedColor}
                   onChange={(e) => {
                     const value = e.target.value;

@@ -32,31 +32,45 @@ const GuildSchema = new mongoose.Schema({
     }
   },
   
-  // ========== NUEVO: Filtro de Multimedia ==========
+  // ========== Filtro de Multimedia ==========
   mediaFilter: {
     enabled: { type: Boolean, default: false },
-    sourceChannels: [{ type: String }], // Canales de origen donde capturar multimedia
-    targetChannelId: { type: String, default: null }, // Canal destino donde reenviar
+    sourceChannels: [{ type: String }],
+    targetChannelId: { type: String, default: null },
     types: {
       images: { type: Boolean, default: true },
       videos: { type: Boolean, default: true },
       gifs: { type: Boolean, default: true }
     },
-    includeEmbeds: { type: Boolean, default: false }, // Incluir embeds de links (YouTube, etc.)
+    includeEmbeds: { type: Boolean, default: false },
     customMessage: { 
       type: String, 
       default: '📎 **{author}** compartió multimedia desde #{channel}' 
     }
   },
-  // ================================================
-    // ========== Configuración Global de Logros ==========
+  
+  // ========== Configuración Global de Logros ==========
   achievementsConfig: {
-    notificationChannelId: { type: String, default: null }, // Canal global para todas las notificaciones de logros
+    notificationChannelId: { type: String, default: null },
     defaultMessage: { 
       type: String, 
       default: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!' 
     }
   },
+  
+  // ========== NUEVO: Configuración de Cumpleaños ==========
+  birthdays: {
+    enabled: { type: Boolean, default: false },
+    channelId: { type: String, default: null },
+    message: { 
+      type: String, 
+      default: '🎂 ¡Feliz cumpleaños {mention}! 🎉 ¡Que tengas un día increíble!' 
+    },
+    mentionRole: { type: String, default: null }, // roleId, @everyone, @here, o null
+    embedEnabled: { type: Boolean, default: true },
+    embedColor: { type: String, default: '#FF69B4' }
+  },
+  // ======================================================
   
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
