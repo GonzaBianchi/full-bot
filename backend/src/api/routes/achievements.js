@@ -56,11 +56,20 @@ router.post('/:guildId/config/achievements', isAuthenticated, hasGuildPermission
   body('boostRoleId').optional().isString(),
   body('enabled').optional().isBoolean(),
   body('notifications.enabled').optional().isBoolean(),
-  body('notifications.channelId').optional().isString(),
+  // ========== FIX: Validación personalizada para channelId ==========
+  body('notifications.channelId')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      if (typeof value === 'string' && value.trim().length >= 1) return true;
+      throw new Error('channelId debe ser un ID válido, string vacío o null');
+    }),
+  // ==================================================================
   body('notifications.message').optional().isString().isLength({ max: 500 }),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      logger.warn('❌ Errores de validación en POST /achievements:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
     next();
@@ -137,11 +146,20 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
   body('boostRoleId').optional().isString(),
   body('enabled').optional().isBoolean(),
   body('notifications.enabled').optional().isBoolean(),
-  body('notifications.channelId').optional().isString(),
+  // ========== FIX: Validación personalizada para channelId ==========
+  body('notifications.channelId')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      if (typeof value === 'string' && value.trim().length >= 1) return true;
+      throw new Error('channelId debe ser un ID válido, string vacío o null');
+    }),
+  // ==================================================================
   body('notifications.message').optional().isString().isLength({ max: 500 }),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      logger.warn('❌ Errores de validación en PUT /achievements:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
     next();
@@ -163,6 +181,11 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
         }
       }
       updates.tiers = sortedTiers;
+    }
+
+    // Convertir string vacío a null para channelId
+    if (updates.notifications?.channelId === '') {
+      updates.notifications.channelId = null;
     }
 
     updates.updatedAt = new Date();
