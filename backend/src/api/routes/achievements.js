@@ -136,13 +136,17 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
   body('name').optional().isString().isLength({ min: 1, max: 100 }),
   body('description').optional().isString().isLength({ max: 500 }),
   body('icon').optional().isString().isLength({ max: 100 }),
-  body('tiers').optional().isArray().isLength({ min: 1, max: 10 }),
-  body('tiers.*.tier').if(body('tiers').exists()).isInt({ min: 1 }),
-  body('tiers.*.title').if(body('tiers').exists()).isString().isLength({ min: 1, max: 100 }),
-  body('tiers.*.target').if(body('tiers').exists()).isInt({ min: 1 }),
+  
+  // ========== FIX: Validación mejorada para tiers ==========
+  body('tiers').optional().isArray({ min: 1, max: 10 }),
+  body('tiers.*.tier').optional().isInt({ min: 1 }),
+  body('tiers.*.title').optional().isString().isLength({ min: 1, max: 100 }),
+  body('tiers.*.target').optional().isInt({ min: 1 }),
   body('tiers.*.description').optional().isString().isLength({ max: 200 }),
   body('tiers.*.emoji').optional().isString(),
   body('tiers.*._id').optional().isString(), // Permitir el _id de MongoDB
+  // =========================================================
+  
   // ========== FIX: rewardRoleId puede ser null o string ==========
   body('tiers.*.rewardRoleId')
     .optional({ nullable: true })
@@ -152,6 +156,7 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
       throw new Error('rewardRoleId debe ser un ID válido o null');
     }),
   // ==============================================================
+  
   // ========== FIX: boostRoleId puede ser null o string ==========
   body('boostRoleId')
     .optional({ nullable: true })
@@ -161,8 +166,10 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
       throw new Error('boostRoleId debe ser un ID válido o null');
     }),
   // ==============================================================
+  
   body('enabled').optional().isBoolean(),
   body('notifications.enabled').optional().isBoolean(),
+  
   // ========== FIX: Validación personalizada para channelId ==========
   body('notifications.channelId')
     .optional({ nullable: true })
@@ -172,6 +179,7 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
       throw new Error('channelId debe ser un ID válido, string vacío o null');
     }),
   // ==================================================================
+  
   body('notifications.message')
     .optional({ nullable: true })
     .custom((value) => {
@@ -179,6 +187,7 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
       if (typeof value === 'string' && value.trim().length >= 1 && value.length <= 500) return true;
       throw new Error('message debe ser válido (1-500 caracteres) o null');
     }),
+  
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -194,7 +203,14 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
 
     // Validar tiers si se están actualizando
     if (updates.tiers) {
-      const sortedTiers = [...updates.tiers].sort((a, b) => a.tier - b.tier);
+      // Limpiar los _id de MongoDB antes de validar
+      const cleanedTiers = updates.tiers.map(tier => {
+        const { _id, ...tierWithoutId } = tier;
+        return tierWithoutId;
+      });
+      
+      const sortedTiers = [...cleanedTiers].sort((a, b) => a.tier - b.tier);
+      
       for (let i = 0; i < sortedTiers.length; i++) {
         if (sortedTiers[i].tier !== i + 1) {
           return res.status(400).json({ error: 'Los tiers deben ser consecutivos' });
@@ -203,6 +219,7 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
           return res.status(400).json({ error: 'Los targets deben ser incrementales' });
         }
       }
+      
       updates.tiers = sortedTiers;
     }
 

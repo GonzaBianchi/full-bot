@@ -278,13 +278,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
     tiers: achievement?.tiers || [{ tier: 1, title: '', target: 100, emoji: '🥉', description: '', rewardRoleId: '' }],
     boostRoleId: achievement?.boostRoleId || '',
     enabled: achievement?.enabled !== undefined ? achievement.enabled : true,
-    // ========== Campos de notificaciones (opcionales) ==========
     notifications: {
       enabled: achievement?.notifications?.enabled !== undefined ? achievement.notifications.enabled : true,
       channelId: achievement?.notifications?.channelId || '',
-      message: achievement?.notifications?.message || '' // Vacío = usar global
+      message: achievement?.notifications?.message || ''
     }
-    // ====================================================
   });
 
   const [saving, setSaving] = useState(false);
@@ -292,7 +290,6 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validaciones
     if (!formData.name.trim()) {
       alert('El nombre es requerido');
       return;
@@ -322,15 +319,18 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
     try {
       setSaving(true);
       
-      const cleanedTiers = formData.tiers.map(tier => ({
-        ...tier,
-        rewardRoleId: tier.rewardRoleId || null
-      }));
+      const cleanedTiers = formData.tiers.map(tier => {
+        // Eliminar _id si existe (MongoDB lo añade automáticamente)
+        const { _id, ...cleanTier } = tier;
+        return {
+          ...cleanTier,
+          rewardRoleId: cleanTier.rewardRoleId || null
+        };
+      });
 
       const payload = {
         ...formData,
         tiers: cleanedTiers,
-        // Limpiar notificaciones: enviar null si están vacíos
         notifications: {
           enabled: formData.notifications.enabled,
           channelId: formData.notifications.channelId || null,
@@ -346,7 +346,7 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
       
       onClose();
     } catch (error) {
-      // Error ya manejado por el hook
+      console.error('Error saving achievement:', error);
     } finally {
       setSaving(false);
     }
@@ -409,10 +409,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* Tipo */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="achievement-type" className="block text-sm font-medium text-gray-300 mb-2">
               Tipo de Logro
             </label>
             <select
+              id="achievement-type"
               value={formData.type}
               onChange={(e) => setFormData({ ...formData, type: e.target.value })}
               disabled={isEditing}
@@ -432,10 +433,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
           {/* Nombre e Icono */}
           <div className="grid grid-cols-4 gap-4">
             <div className="col-span-3">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label htmlFor="achievement-name" className="block text-sm font-medium text-gray-300 mb-2">
                 Nombre del Logro *
               </label>
               <input
+                id="achievement-name"
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -446,10 +448,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label htmlFor="achievement-icon" className="block text-sm font-medium text-gray-300 mb-2">
                 Icono
               </label>
               <input
+                id="achievement-icon"
                 type="text"
                 value={formData.icon}
                 onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
@@ -462,10 +465,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
 
           {/* Descripción */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="achievement-description" className="block text-sm font-medium text-gray-300 mb-2">
               Descripción
             </label>
             <textarea
+              id="achievement-description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2"
@@ -478,10 +482,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
           {/* Boost Role (solo para tipo boost) */}
           {formData.type === 'boost' && (
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label htmlFor="boost-role" className="block text-sm font-medium text-gray-300 mb-2">
                 Rol de Booster *
               </label>
               <select
+                id="boost-role"
                 value={formData.boostRoleId}
                 onChange={(e) => setFormData({ ...formData, boostRoleId: e.target.value })}
                 className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2"
@@ -500,7 +505,7 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
             </div>
           )}
 
-          {/* ========== Configuración de Notificaciones (Opcional - Sobreescribe la global) ========== */}
+          {/* Configuración de Notificaciones */}
           <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
             <div className="flex items-center gap-2 mb-4">
               <Bell className="w-5 h-5 text-indigo-400" />
@@ -539,11 +544,12 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
               <>
                 {/* Canal de notificaciones */}
                 <div className="mb-4">
-                  <label className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                  <label htmlFor="notification-channel" className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
                     <Hash className="w-4 h-4" />
                     Canal específico (opcional)
                   </label>
                   <select
+                    id="notification-channel"
                     value={formData.notifications.channelId || ''}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -565,10 +571,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
 
                 {/* Mensaje de notificación */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label htmlFor="notification-message" className="block text-sm font-medium text-gray-300 mb-2">
                     Mensaje personalizado (opcional)
                   </label>
                   <textarea
+                    id="notification-message"
                     value={formData.notifications.message || ''}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -713,6 +720,7 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
             </label>
           </div>
 
+          {/* Actions */}
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
             <button
