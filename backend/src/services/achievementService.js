@@ -8,12 +8,29 @@ import logger from '../utils/logger.js';
 class AchievementService {
   constructor() {
     this.discordClient = null;
+    // ========== NUEVO: Cache para prevenir notificaciones duplicadas ==========
+    this.notificationCache = new Map(); // key: `${userId}-${guildId}-${achievementId}-${tier}`
+    this.NOTIFICATION_COOLDOWN = 10000; // 10 segundos de cooldown
+    // ===========================================================================
   }
 
   setClient(client) {
     this.discordClient = client;
     logger.info('Discord client inyectado en AchievementService');
   }
+
+  // ========== NUEVO: Método para limpiar cache periódicamente ==========
+  startCacheCleanup() {
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, timestamp] of this.notificationCache.entries()) {
+        if (now - timestamp > this.NOTIFICATION_COOLDOWN) {
+          this.notificationCache.delete(key);
+        }
+      }
+    }, 30000); // Limpiar cada 30 segundos
+  }
+  // ======================================================================
 
   async trackMessage(userId, guildId, channelId = null) {
     try {
@@ -132,6 +149,10 @@ class AchievementService {
       enabled: true 
     });
 
+    // ========== NUEVO: Array para guardar los cambios y aplicarlos al final ==========
+    const unlockedTiers = [];
+    // =================================================================================
+
     for (const achievement of achievements) {
       let progress = userAch.achievements.find(
         a => a.achievementId.toString() === achievement._id.toString()
@@ -165,6 +186,7 @@ class AchievementService {
       }
 
       for (const tier of achievement.tiers.sort((a, b) => a.tier - b.tier)) {
+        // ========== FIX: Verificar ANTES de añadir ==========
         if (
           progress.currentValue >= tier.target && 
           !progress.unlockedTiers.includes(tier.tier)
@@ -176,20 +198,40 @@ class AchievementService {
             `Usuario ${userAch.userId} desbloqueó: ${achievement.name} - ${tier.title} en guild ${userAch.guildId}`
           );
           
-          await this.sendAchievementNotification(
-            userAch.userId,
-            userAch.guildId,
+          // Guardar para procesar después
+          unlockedTiers.push({
+            userId: userAch.userId,
+            guildId: userAch.guildId,
             achievement,
             tier,
             channelId
-          );
-          
-          if (tier.rewardRoleId) {
-            await this.assignRewardRole(userAch.userId, userAch.guildId, tier.rewardRoleId);
-          }
+          });
+          // ==================================================
         }
       }
     }
+
+    // ========== NUEVO: Guardar primero, notificar después ==========
+    if (unlockedTiers.length > 0) {
+      // Guardar los cambios en la BD ANTES de enviar notificaciones
+      await userAch.save();
+      
+      // Ahora enviar las notificaciones
+      for (const unlock of unlockedTiers) {
+        await this.sendAchievementNotification(
+          unlock.userId,
+          unlock.guildId,
+          unlock.achievement,
+          unlock.tier,
+          unlock.channelId
+        );
+        
+        if (unlock.tier.rewardRoleId) {
+          await this.assignRewardRole(unlock.userId, unlock.guildId, unlock.tier.rewardRoleId);
+        }
+      }
+    }
+    // ================================================================
   }
 
   async sendAchievementNotification(userId, guildId, achievement, tier, fallbackChannelId = null) {
@@ -197,6 +239,22 @@ class AchievementService {
       if (!achievement.notifications?.enabled) {
         return;
       }
+
+      // ========== NUEVO: Verificar cache de notificaciones ==========
+      const cacheKey = `${userId}-${guildId}-${achievement._id}-${tier.tier}`;
+      const lastNotification = this.notificationCache.get(cacheKey);
+      
+      if (lastNotification) {
+        const timeSinceLastNotification = Date.now() - lastNotification;
+        if (timeSinceLastNotification < this.NOTIFICATION_COOLDOWN) {
+          logger.info(`Notificación de logro duplicada prevenida para ${userId} - ${achievement.name} tier ${tier.tier}`);
+          return;
+        }
+      }
+      
+      // Marcar que estamos enviando esta notificación
+      this.notificationCache.set(cacheKey, Date.now());
+      // ==============================================================
 
       if (!this.discordClient) {
         logger.warn('Discord client no disponible para notificación de logro');
@@ -260,6 +318,10 @@ class AchievementService {
       logger.info(`Notificación de logro enviada a ${member.user.tag} en ${channel.name}`);
     } catch (error) {
       logger.error('Error enviando notificación de logro:', error);
+      // ========== NUEVO: Limpiar cache en caso de error ==========
+      const cacheKey = `${userId}-${guildId}-${achievement._id}-${tier.tier}`;
+      this.notificationCache.delete(cacheKey);
+      // ===========================================================
     }
   }
 
@@ -417,4 +479,10 @@ class AchievementService {
   }
 }
 
-export default new AchievementService();
+const achievementService = new AchievementService();
+
+// ========== NUEVO: Iniciar limpieza de cache ==========
+achievementService.startCacheCleanup();
+// ======================================================
+
+export default achievementService;
