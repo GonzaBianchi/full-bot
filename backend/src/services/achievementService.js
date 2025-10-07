@@ -209,14 +209,20 @@ class AchievementService {
       const member = await guild.members.fetch(userId).catch(() => null);
       if (!member) return;
 
-      let notificationChannelId = achievement.notifications.channelId || fallbackChannelId;
+      // Obtener configuración del servidor
+      const guildConfig = await GuildModel.findOne({ guildId }).lean();
+      
+      // Prioridad del canal: 1) Global del servidor, 2) Específico del logro, 3) Canal donde se desbloqueó
+      let notificationChannelId = guildConfig?.achievementsConfig?.notificationChannelId 
+        || achievement.notifications.channelId 
+        || fallbackChannelId;
+      
       if (!notificationChannelId) return;
 
       const channel = await guild.channels.fetch(notificationChannelId).catch(() => null);
       if (!channel || !channel.isTextBased()) return;
 
       // Obtener configuración de imagen
-      const guildConfig = await GuildModel.findOne({ guildId }).lean();
       const imageConfig = guildConfig?.images?.achievementNotification || {};
 
       // Generar imagen de notificación
@@ -231,8 +237,10 @@ class AchievementService {
 
       const attachment = new AttachmentBuilder(imageBuffer, { name: 'achievement.png' });
 
-      // Preparar mensaje de texto
-      let message = achievement.notifications.message || '{mention} ha desbloqueado: **{achievement}** - {tier}!';
+      // Preparar mensaje de texto - Usar mensaje global si no hay específico
+      let message = achievement.notifications.message 
+        || guildConfig?.achievementsConfig?.defaultMessage 
+        || '{mention} ha desbloqueado: **{achievement}** - {tier}!';
       
       message = message
         .replace(/{mention}/g, `<@${userId}>`)

@@ -3,6 +3,7 @@ import { useAchievements } from '../../hooks/useAchievements';
 import { Trophy, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Award, Bell, Hash } from 'lucide-react';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ImageBannerSettings } from './ImageBannerSettings';
+import { GlobalAchievementsConfig } from './GlobalAchievementsConfig';
 
 export function AchievementsSettings({ guildId, roles, channels }) {
   const {
@@ -97,6 +98,9 @@ export function AchievementsSettings({ guildId, roles, channels }) {
         </div>
       </div>
 
+      {/* Configuración Global */}
+      <GlobalAchievementsConfig guildId={guildId} channels={channels} />
+
       {/* Lista de logros */}
       {achievements.length === 0 ? (
         <div className="text-center py-12 bg-gray-800/50 rounded-xl border border-gray-700/50">
@@ -157,7 +161,7 @@ function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, ro
 
   const getChannelName = (channelId) => {
     const channel = channels.find(c => c.id === channelId);
-    return channel ? `# ${channel.name}` : 'Mismo canal';
+    return channel ? `# ${channel.name}` : 'Canal global';
   };
 
   return (
@@ -190,7 +194,7 @@ function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, ro
                   <span className="text-gray-400">
                     {achievement.notifications.channelId 
                       ? getChannelName(achievement.notifications.channelId)
-                      : 'Mismo canal'}
+                      : 'Canal global del servidor'}
                   </span>
                 )}
               </div>
@@ -274,11 +278,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
     tiers: achievement?.tiers || [{ tier: 1, title: '', target: 100, emoji: '🥉', description: '', rewardRoleId: '' }],
     boostRoleId: achievement?.boostRoleId || '',
     enabled: achievement?.enabled !== undefined ? achievement.enabled : true,
-    // ========== NUEVO: Campos de notificaciones ==========
+    // ========== Campos de notificaciones (opcionales) ==========
     notifications: {
       enabled: achievement?.notifications?.enabled !== undefined ? achievement.notifications.enabled : true,
       channelId: achievement?.notifications?.channelId || '',
-      message: achievement?.notifications?.message || '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+      message: achievement?.notifications?.message || '' // Vacío = usar global
     }
     // ====================================================
   });
@@ -326,10 +330,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
       const payload = {
         ...formData,
         tiers: cleanedTiers,
-        // Limpiar channelId si está vacío
+        // Limpiar notificaciones: enviar null si están vacíos
         notifications: {
-          ...formData.notifications,
-          channelId: formData.notifications.channelId || null
+          enabled: formData.notifications.enabled,
+          channelId: formData.notifications.channelId || null,
+          message: formData.notifications.message || null
         }
       };
 
@@ -495,17 +500,21 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
             </div>
           )}
 
-          {/* ========== NUEVO: Configuración de Notificaciones ========== */}
+          {/* ========== Configuración de Notificaciones (Opcional - Sobreescribe la global) ========== */}
           <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
             <div className="flex items-center gap-2 mb-4">
               <Bell className="w-5 h-5 text-indigo-400" />
-              <h3 className="text-lg font-semibold text-white">Notificaciones</h3>
+              <h3 className="text-lg font-semibold text-white">Notificaciones (Opcional)</h3>
             </div>
+            <p className="text-sm text-gray-400 mb-4">
+              Si no se especifica un canal aquí, se usará la configuración global del servidor.
+              Deja estos campos vacíos para usar los valores predeterminados.
+            </p>
 
             {/* Habilitar notificaciones */}
             <div className="flex items-center justify-between mb-4 p-3 bg-gray-700/50 rounded-lg">
               <div>
-                <p className="text-white font-medium">Habilitar notificaciones</p>
+                <p className="text-white font-medium">Habilitar notificaciones para este logro</p>
                 <p className="text-gray-400 text-sm">Enviar mensaje cuando alguien desbloquea este logro</p>
               </div>
               <button
@@ -532,17 +541,17 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
                 <div className="mb-4">
                   <label className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
                     <Hash className="w-4 h-4" />
-                    Canal de notificaciones
+                    Canal específico (opcional)
                   </label>
                   <select
-                    value={formData.notifications.channelId}
+                    value={formData.notifications.channelId || ''}
                     onChange={(e) => setFormData({
                       ...formData,
                       notifications: { ...formData.notifications, channelId: e.target.value }
                     })}
                     className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2"
                   >
-                    <option value="">Mismo canal donde se desbloqueó</option>
+                    <option value="">Usar canal global del servidor</option>
                     {channels.map(channel => (
                       <option key={channel.id} value={channel.id}>
                         # {channel.name}
@@ -550,24 +559,24 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
                     ))}
                   </select>
                   <p className="text-xs text-gray-400 mt-1">
-                    Si no se selecciona, el mensaje se enviará en el mismo canal donde se desbloqueó el logro
+                    Si no se selecciona, se usará el canal configurado globalmente
                   </p>
                 </div>
 
                 {/* Mensaje de notificación */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Mensaje de notificación
+                    Mensaje personalizado (opcional)
                   </label>
                   <textarea
-                    value={formData.notifications.message}
+                    value={formData.notifications.message || ''}
                     onChange={(e) => setFormData({
                       ...formData,
                       notifications: { ...formData.notifications, message: e.target.value }
                     })}
                     className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2"
                     rows={3}
-                    placeholder="🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!"
+                    placeholder="Deja vacío para usar el mensaje global del servidor"
                     maxLength={500}
                   />
                   <div className="mt-2 flex flex-wrap gap-2">

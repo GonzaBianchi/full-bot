@@ -39,8 +39,8 @@ const AchievementSchema = new mongoose.Schema({
   // ========== NUEVO: Configuración de notificaciones ==========
   notifications: {
     enabled: { type: Boolean, default: true },
-    channelId: { type: String, default: null }, // null = mismo canal donde se desbloqueó
-    message: { type: String, default: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!' }
+    channelId: { type: String, default: null }, // null = usa canal global del servidor
+    message: { type: String, default: null } // null = usa mensaje global del servidor
     // Variables: {mention}, {username}, {achievement}, {tier}, {tierTitle}, {emoji}
   },
   // ============================================================

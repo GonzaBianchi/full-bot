@@ -314,6 +314,80 @@ router.get('/public/:guildId/info', async (req, res) => {
   }
 });
 
+// ========== CONFIGURACIÓN GLOBAL DE LOGROS ==========
+
+// Obtener configuración global de logros
+router.get('/:guildId/config/achievements-global', isAuthenticated, hasGuildPermission, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    let cfg = await GuildModel.findOne({ guildId }).lean();
+    if (!cfg) {
+      cfg = await GuildModel.create({ guildId });
+    }
+
+    res.json({ 
+      config: cfg.achievementsConfig || {
+        notificationChannelId: null,
+        defaultMessage: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+      }
+    });
+  } catch (error) {
+    logger.error('Error al obtener configuración global de logros:', error);
+    res.status(500).json({ error: 'Error al obtener configuración' });
+  }
+});
+
+// Actualizar configuración global de logros
+router.post('/:guildId/config/achievements-global',
+  isAuthenticated,
+  hasGuildPermission,
+  [
+    param('guildId').exists(),
+    body('notificationChannelId')
+      .optional({ nullable: true })
+      .custom((value) => {
+        if (value === null || value === undefined || value === '') return true;
+        if (typeof value === 'string' && value.trim().length >= 1) return true;
+        throw new Error('notificationChannelId debe ser un ID válido o null');
+      }),
+    body('defaultMessage').optional().isString().isLength({ min: 1, max: 500 }),
+    (req, res, next) => {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      next();
+    }
+  ],
+  async (req, res) => {
+    try {
+      const { guildId } = req.params;
+      const { notificationChannelId, defaultMessage } = req.body;
+
+      const update = {};
+      if (notificationChannelId !== undefined) {
+        update['achievementsConfig.notificationChannelId'] = notificationChannelId || null;
+      }
+      if (defaultMessage !== undefined) {
+        update['achievementsConfig.defaultMessage'] = defaultMessage;
+      }
+
+      const cfg = await GuildModel.findOneAndUpdate(
+        { guildId },
+        { $set: update },
+        { new: true, upsert: true }
+      );
+
+      logger.info(`✅ Configuración global de logros actualizada para guild ${guildId}`);
+      res.json({ config: cfg.achievementsConfig });
+    } catch (error) {
+      logger.error('Error actualizando configuración global de logros:', error);
+      res.status(500).json({ error: 'Error al actualizar configuración' });
+    }
+  }
+);
+
 // ========== CONFIGURACIÓN DE IMÁGENES ==========
 
 // Obtener configuración de imágenes

@@ -49,6 +49,14 @@ const GuildSchema = new mongoose.Schema({
     }
   },
   // ================================================
+    // ========== Configuración Global de Logros ==========
+  achievementsConfig: {
+    notificationChannelId: { type: String, default: null }, // Canal global para todas las notificaciones de logros
+    defaultMessage: { 
+      type: String, 
+      default: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!' 
+    }
+  },
   
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
