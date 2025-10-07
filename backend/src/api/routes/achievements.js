@@ -51,9 +51,25 @@ router.post('/:guildId/config/achievements', isAuthenticated, hasGuildPermission
   body('tiers.*.title').isString().isLength({ min: 1, max: 100 }),
   body('tiers.*.target').isInt({ min: 1 }),
   body('tiers.*.description').optional().isString().isLength({ max: 200 }),
-  body('tiers.*.rewardRoleId').optional().isString(),
+  // ========== FIX: rewardRoleId puede ser null o string ==========
+  body('tiers.*.rewardRoleId')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      if (typeof value === 'string' && value.trim().length >= 1) return true;
+      throw new Error('rewardRoleId debe ser un ID válido o null');
+    }),
+  // ==============================================================
   body('tiers.*.emoji').optional().isString(),
-  body('boostRoleId').optional().isString(),
+  // ========== FIX: boostRoleId puede ser null o string ==========
+  body('boostRoleId')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      if (typeof value === 'string' && value.trim().length >= 1) return true;
+      throw new Error('boostRoleId debe ser un ID válido o null');
+    }),
+  // ==============================================================
   body('enabled').optional().isBoolean(),
   body('notifications.enabled').optional().isBoolean(),
   // ========== FIX: Validación personalizada para channelId ==========
@@ -141,9 +157,25 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
   body('tiers.*.title').optional().isString().isLength({ min: 1, max: 100 }),
   body('tiers.*.target').optional().isInt({ min: 1 }),
   body('tiers.*.description').optional().isString().isLength({ max: 200 }),
-  body('tiers.*.rewardRoleId').optional().isString(),
+  // ========== FIX: rewardRoleId puede ser null o string ==========
+  body('tiers.*.rewardRoleId')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      if (typeof value === 'string' && value.trim().length >= 1) return true;
+      throw new Error('rewardRoleId debe ser un ID válido o null');
+    }),
+  // ==============================================================
   body('tiers.*.emoji').optional().isString(),
-  body('boostRoleId').optional().isString(),
+  // ========== FIX: boostRoleId puede ser null o string ==========
+  body('boostRoleId')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      if (typeof value === 'string' && value.trim().length >= 1) return true;
+      throw new Error('boostRoleId debe ser un ID válido o null');
+    }),
+  // ==============================================================
   body('enabled').optional().isBoolean(),
   body('notifications.enabled').optional().isBoolean(),
   // ========== FIX: Validación personalizada para channelId ==========
@@ -171,13 +203,24 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
 
     // Validar tiers si se están actualizando
     if (updates.tiers) {
-      const sortedTiers = [...updates.tiers].sort((a, b) => a.tier - b.tier);
+      // ========== FIX: Limpiar _id de MongoDB de los tiers ==========
+      const cleanedTiers = updates.tiers.map(tier => {
+        const { _id, ...tierWithoutId } = tier;
+        return tierWithoutId;
+      });
+      // ==============================================================
+      
+      const sortedTiers = [...cleanedTiers].sort((a, b) => a.tier - b.tier);
       for (let i = 0; i < sortedTiers.length; i++) {
         if (sortedTiers[i].tier !== i + 1) {
           return res.status(400).json({ error: 'Los tiers deben ser consecutivos' });
         }
         if (i > 0 && sortedTiers[i].target <= sortedTiers[i - 1].target) {
           return res.status(400).json({ error: 'Los targets deben ser incrementales' });
+        }
+        // Convertir strings vacíos y null a null para rewardRoleId
+        if (sortedTiers[i].rewardRoleId === '' || sortedTiers[i].rewardRoleId === null) {
+          sortedTiers[i].rewardRoleId = null;
         }
       }
       updates.tiers = sortedTiers;
@@ -186,6 +229,11 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
     // Convertir string vacío a null para channelId
     if (updates.notifications?.channelId === '') {
       updates.notifications.channelId = null;
+    }
+    
+    // Convertir string vacío a null para boostRoleId
+    if (updates.boostRoleId === '') {
+      updates.boostRoleId = null;
     }
 
     updates.updatedAt = new Date();
