@@ -28,23 +28,21 @@ const validatePagination = [
 // Rate limiter para ruta pública (por IP)
 const publicLimiter = rateLimit({
   windowMs: 30 * 1000, // 30s
-  max: 10, // max 10 requests por 30s por IP
+  max: 20, // max 20 requests por 30s por IP (aumentado para permitir más fetches)
   standardHeaders: true,
   legacyHeaders: false
 });
 
 // Rutas autenticadas existentes (se mantienen)
-// Obtener leaderboard de un servidor (autenticado)
 router.get('/:guildId', isAuthenticated, validatePagination, async (req, res) => {
   try {
     const { guildId } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const sortBy = req.query.sortBy || 'totalXp'; // totalXp, level, messageCount
+    const sortBy = req.query.sortBy || 'totalXp';
 
     const skip = (page - 1) * limit;
 
-    // Obtener usuarios
     const users = await User.find({ guildId })
       .sort({ [sortBy]: -1 })
       .skip(skip)
@@ -52,11 +50,10 @@ router.get('/:guildId', isAuthenticated, validatePagination, async (req, res) =>
 
     const total = await User.countDocuments({ guildId });
 
-    // Enriquecer datos con información de Discord
     const enrichedUsers = await Promise.all(
       users.map(async (user, index) => {
         try {
-          const discordUser = req.discordClient ? await req.discordClient.users.fetch(user.userId) : null;
+          const discordUser = req.discordClient ? await req.discordClient.users.fetch(user.userId).catch(() => null) : null;
           return {
             ...user.toObject(),
             rank: skip + index + 1,
@@ -91,7 +88,7 @@ router.get('/:guildId', isAuthenticated, validatePagination, async (req, res) =>
   }
 });
 
-// Ruta pública para leaderboard (sin auth) - con rate limit y cache
+// ========== RUTA PÚBLICA CON DISCORD FETCH ==========
 router.get('/public/:guildId', publicLimiter, validatePagination, async (req, res) => {
   try {
     const { guildId } = req.params;
@@ -99,11 +96,14 @@ router.get('/public/:guildId', publicLimiter, validatePagination, async (req, re
     const limit = parseInt(req.query.limit) || 10;
     const sortBy = req.query.sortBy || 'totalXp';
 
+    // ========== CACHE: Comprobar si hay datos en cache ==========
     const cacheKey = `${guildId}:${page}:${limit}:${sortBy}`;
     const cached = publicCache.get(cacheKey);
     if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
+      logger.info(`Cache hit para leaderboard público de ${guildId}`);
       return res.json(cached.value);
     }
+    // ============================================================
 
     const skip = (page - 1) * limit;
 
@@ -115,13 +115,38 @@ router.get('/public/:guildId', publicLimiter, validatePagination, async (req, re
 
     const total = await User.countDocuments({ guildId });
 
-    // enrich best-effort without heavy fetches
-    const enriched = users.map((u, idx) => {
+    // ========== ENRIQUECER CON DATOS DE DISCORD ==========
+    const enriched = await Promise.all(users.map(async (u, idx) => {
       const rank = skip + idx + 1;
       const currentLevelTotal = (typeof u.level === 'number') ? xpForLevel(u.level) : 0;
       const nextLevelTotal = (typeof u.level === 'number') ? xpForLevel(u.level + 1) : 0;
       const xpIntoLevel = Math.max(0, u.totalXp - currentLevelTotal);
       const xpForNext = Math.max(0, nextLevelTotal - currentLevelTotal);
+
+      // ========== INTENTAR FETCH DE DISCORD ==========
+      let username = u.username || null;
+      let discriminator = u.discriminator || null;
+      let avatar = u.avatar || null;
+
+      if (req.discordClient) {
+        try {
+          const discordUser = await req.discordClient.users.fetch(u.userId).catch(() => null);
+          if (discordUser) {
+            username = discordUser.username;
+            discriminator = discordUser.discriminator;
+            avatar = discordUser.displayAvatarURL({ dynamic: true, size: 128 });
+
+            // ========== BONUS: Actualizar en BD para futuros requests ==========
+            User.updateDiscordInfo(u.guildId, u.userId, discordUser).catch(err => {
+              logger.warn('Error actualizando info de Discord en BD:', err.message);
+            });
+            // ==================================================================
+          }
+        } catch (fetchError) {
+          logger.warn(`No se pudo obtener usuario ${u.userId} de Discord:`, fetchError.message);
+        }
+      }
+      // ===============================================
 
       return {
         userId: u.userId,
@@ -129,15 +154,17 @@ router.get('/public/:guildId', publicLimiter, validatePagination, async (req, re
         totalXp: u.totalXp,
         messageCount: u.messageCount,
         rank,
-        username: u.username || null,
-        avatar: u.avatar || null,
+        username,
+        discriminator,
+        avatar,
         progress: {
           xp: xpIntoLevel,
           xpForNextLevel: xpForNext,
           percent: xpForNext > 0 ? Math.floor((xpIntoLevel / xpForNext) * 100) : 100
         }
       };
-    });
+    }));
+    // ====================================================
 
     const payload = {
       leaderboard: enriched,
@@ -149,6 +176,7 @@ router.get('/public/:guildId', publicLimiter, validatePagination, async (req, re
       }
     };
 
+    // Guardar en cache
     publicCache.set(cacheKey, { ts: Date.now(), value: payload });
 
     res.json(payload);
@@ -157,6 +185,7 @@ router.get('/public/:guildId', publicLimiter, validatePagination, async (req, re
     res.status(500).json({ error: 'Error al obtener leaderboard público' });
   }
 });
+// ===================================================
 
 // Obtener top usuarios globales (todos los servidores)
 router.get('/global/top', isAuthenticated, [
@@ -170,7 +199,6 @@ router.get('/global/top', isAuthenticated, [
   try {
     const limit = parseInt(req.query.limit) || 10;
 
-    // Agregar XP total por usuario en todos los servidores
     const topUsers = await User.aggregate([
       {
         $group: {
@@ -186,10 +214,9 @@ router.get('/global/top', isAuthenticated, [
       { $limit: limit }
     ]);
 
-    // Optional: enrich with Discord data (best-effort)
     const enriched = await Promise.all(topUsers.map(async (u) => {
       try {
-        const discordUser = req.discordClient ? await req.discordClient.users.fetch(u._id) : null;
+        const discordUser = req.discordClient ? await req.discordClient.users.fetch(u._id).catch(() => null) : null;
         return {
           userId: u._id,
           totalXp: u.totalXp,
@@ -286,12 +313,10 @@ router.get('/:guildId/stats', isAuthenticated, async (req, res) => {
       });
     }
 
-    // Obtener usuario con más XP
     const topUser = await User.findOne({ guildId })
       .sort({ totalXp: -1 })
       .limit(1);
 
-    // Obtener usuario más activo (más mensajes)
     const mostActive = await User.findOne({ guildId })
       .sort({ messageCount: -1 })
       .limit(1);
