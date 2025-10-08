@@ -85,35 +85,18 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
               className="w-full flex items-center justify-center p-3 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all cursor-pointer mb-4"
               title="Volver"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-6 h-6" />
             </button>
           )}
 
-          {/* Dropdown de Servidores */}
-          {currentGuild && (
+          {/* Dropdown de Servidores - Solo visible cuando está expandido */}
+          {currentGuild && !isCollapsed && (
             <div className="mb-6 relative" ref={dropdownRef}>
               <button
-                onClick={() => !isCollapsed && setIsDropdownOpen(!isDropdownOpen)}
-                className={`w-full bg-gray-700/50 hover:bg-gray-700 rounded-lg hover:cursor-pointer p-3 transition-all border border-gray-600/50 hover:border-indigo-500/50 ${
-                  isCollapsed ? 'flex items-center justify-center' : ''
-                }`}
-                title={isCollapsed ? currentGuild.name : ''}
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full bg-gray-700/50 hover:bg-gray-700 rounded-lg hover:cursor-pointer p-3 transition-all border border-gray-600/50 hover:border-indigo-500/50"
               >
-                {isCollapsed ? (
-                  <>
-                    {getGuildIcon(currentGuild) ? (
-                      <img 
-                        src={getGuildIcon(currentGuild)} 
-                        alt={currentGuild.name} 
-                        className="w-8 h-8 rounded-full"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                        {currentGuild.name.charAt(0)}
-                      </div>
-                    )}
-                  </>
-                ) : (
+                {(
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3 flex-1 min-w-0">
                       {getGuildIcon(currentGuild) ? (
@@ -146,7 +129,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
               </button>
 
               {/* Dropdown Menu */}
-              {isDropdownOpen && !isCollapsed && (
+              {isDropdownOpen && (
                 <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 rounded-lg border border-gray-700 shadow-xl z-50 max-h-80 overflow-y-auto">
                   <div className="p-2">
                     {guilds.length === 0 ? (
