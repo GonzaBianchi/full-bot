@@ -10,8 +10,8 @@ function Navbar({ user, onLogout }) {
   };
 
   return (
-    <nav className="bg-[#23272a] border-b border-gray-700">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav className="bg-gray-900/80 backdrop-blur-md border-b border-gray-700/50">
+      <div className="px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link to="/" className="flex items-center space-x-3">
             <Home className="w-6 h-6 text-[#5865f2]" />
