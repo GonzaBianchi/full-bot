@@ -150,7 +150,7 @@ class AchievementService {
     const lockKey = `${userAch.userId}-${userAch.guildId}`;
     
     if (this.processingLocks.get(lockKey)) {
-      logger.debug(`Achievement check ya en proceso para ${lockKey}, ignorando duplicado`);
+      logger.info(`Achievement check ya en proceso para ${lockKey}, ignorando duplicado`);
       return;
     }
     
@@ -240,7 +240,7 @@ class AchievementService {
               channelId
             });
           } else if (hasReachedTarget && alreadyUnlocked) {
-            logger.debug(`Tier ${tier.tier} de ${achievement.name} ya desbloqueado para ${freshUserAch.userId}`);
+            logger.info(`Tier ${tier.tier} de ${achievement.name} ya desbloqueado para ${freshUserAch.userId}`);
           }
         }
       }
@@ -301,7 +301,7 @@ class AchievementService {
       if (lastNotification) {
         const timeSinceLastNotification = Date.now() - lastNotification;
         if (timeSinceLastNotification < this.NOTIFICATION_COOLDOWN) {
-          logger.debug(`⏭️  Notificación duplicada prevenida: ${achievement.name} tier ${tier.tier} para ${userId}`);
+          logger.info(`⏭️  Notificación duplicada prevenida: ${achievement.name} tier ${tier.tier} para ${userId}`);
           return;
         }
       }
@@ -334,7 +334,7 @@ class AchievementService {
         || fallbackChannelId;
       
       if (!notificationChannelId) {
-        logger.debug('No hay canal de notificación configurado');
+        logger.info('No hay canal de notificación configurado');
         return;
       }
 
