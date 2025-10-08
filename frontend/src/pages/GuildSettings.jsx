@@ -79,7 +79,7 @@ function GuildSettings() {
     <>
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
 
-      <div className="flex min-h-screen">
+      <div className="flex h-full">
         <Sidebar 
           activeSection={activeSection} 
           setActiveSection={setActiveSection}

@@ -19,7 +19,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
     { id: 'role-menus', label: 'Role Menus', icon: Shield },
     { id: 'custom-messages', label: 'Mensajes', icon: MessageSquare },
     { id: 'media-filter', label: 'Filtro Multimedia', icon: Film },
-    { id: 'birthdays', label: 'Cumpleaños', icon: Cake }, // ← NUEVA SECCIÓN
+    { id: 'birthdays', label: 'Cumpleaños', icon: Cake },
     { id: 'leaderboard', label: 'Leaderboard', icon: BarChart3 }
   ];
 
@@ -50,7 +50,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
   };
 
   return (
-    <aside className="w-64 min-h-screen bg-gray-800/50 backdrop-blur-sm border-r border-gray-700/50">
+    <aside className="w-64 h-full bg-gray-800/50 backdrop-blur-sm border-r border-gray-700/50 overflow-y-auto">
       <div className="p-6">
         {/* Botón Volver */}
         <button
