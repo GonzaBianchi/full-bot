@@ -1,9 +1,9 @@
 // frontend/src/components/guild-settings/BirthdaySettings.jsx
 import { useState, useEffect } from 'react';
-import { Cake, Save, RotateCcw, AlertCircle } from 'lucide-react';
+import { Cake, AlertCircle, Hash } from 'lucide-react';
+import { StickyActionBar } from '../ui/StickyActionBar';
+import { SearchableSelect } from '../ui/SearchableSelect';
 import { SectionCard } from '../ui/SectionCard';
-import { SaveButton } from '../ui/SaveButton';
-import { UnsavedChangesAlert } from '../ui/UnsavedChangesAlert';
 import { InfoAlert } from '../ui/InfoAlert';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -33,10 +33,8 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
     try {
       const response = await api.get(`/api/guilds/${guildId}/config/birthdays`);
       
-      // ========== FIX: Validar que la respuesta tenga la estructura correcta ==========
       const birthdayConfig = response.data?.birthdays || DEFAULT_SETTINGS;
       
-      // Asegurar que todos los campos necesarios existan
       const validatedConfig = {
         enabled: birthdayConfig.enabled ?? DEFAULT_SETTINGS.enabled,
         channelId: birthdayConfig.channelId ?? DEFAULT_SETTINGS.channelId,
@@ -48,11 +46,9 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
       
       setSettings(validatedConfig);
       setOriginalSettings(validatedConfig);
-      // ============================================================================
     } catch (error) {
       console.error('Error loading birthday settings:', error);
       toast.error('Error al cargar configuración de cumpleaños');
-      // En caso de error, usar valores por defecto
       setSettings(DEFAULT_SETTINGS);
       setOriginalSettings(DEFAULT_SETTINGS);
     } finally {
@@ -63,7 +59,6 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
 
   const handleSave = async () => {
-    // Validar que el canal esté seleccionado si está habilitado
     if (settings.enabled && !settings.channelId) {
       toast.error('Debes seleccionar un canal de cumpleaños');
       return;
@@ -73,7 +68,6 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
     try {
       const response = await api.post(`/api/guilds/${guildId}/config/birthdays`, settings);
       
-      // ========== FIX: Validar respuesta antes de actualizar estado ==========
       if (response.data && response.data.birthdays) {
         const updatedConfig = {
           enabled: response.data.birthdays.enabled ?? settings.enabled,
@@ -88,11 +82,9 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
         setOriginalSettings(updatedConfig);
         toast.success('✅ Configuración de cumpleaños guardada');
       } else {
-        // Si la respuesta no tiene la estructura esperada, mantener settings actuales
         setOriginalSettings(settings);
         toast.success('✅ Configuración guardada');
       }
-      // ======================================================================
     } catch (error) {
       console.error('Error saving birthday settings:', error);
       const errorMsg = error.response?.data?.error || 'Error al guardar configuración';
@@ -109,7 +101,6 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
     try {
       const response = await api.delete(`/api/guilds/${guildId}/config/birthdays`);
       
-      // ========== FIX: Validar respuesta ==========
       if (response.data && response.data.birthdays) {
         const resetConfig = {
           enabled: response.data.birthdays.enabled ?? DEFAULT_SETTINGS.enabled,
@@ -126,7 +117,6 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
         setSettings(DEFAULT_SETTINGS);
         setOriginalSettings(DEFAULT_SETTINGS);
       }
-      // ==========================================
       
       toast.success('✅ Configuración reseteada');
     } catch (error) {
@@ -159,8 +149,25 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
     );
   }
 
+  // Preparar opciones para los selects
+  const channelOptions = channels.map(ch => ({ id: ch.id, name: ch.name }));
+  const roleOptions = [
+    { id: '@everyone', name: '@everyone' },
+    { id: '@here', name: '@here' },
+    ...roles.map(r => ({ id: r.id, name: r.name }))
+  ];
+
   return (
     <div className="space-y-6">
+      {/* Sticky Action Bar */}
+      <StickyActionBar
+        hasChanges={hasChanges}
+        saving={saving}
+        onSave={handleSave}
+        onReset={handleReset}
+        saveText="Guardar Configuración"
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -173,8 +180,6 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
           </p>
         </div>
       </div>
-
-      <UnsavedChangesAlert show={hasChanges} />
 
       {/* Información */}
       <InfoAlert
@@ -221,23 +226,23 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
 
           {/* Canal de Cumpleaños */}
           <div>
-            <label htmlFor="birthday-channel" className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Canal de cumpleaños
             </label>
-            <select
-              id="birthday-channel"
+            <SearchableSelect
               value={settings.channelId || ''}
-              onChange={(e) => setSettings({ ...settings, channelId: e.target.value || null })}
-              disabled={!settings.enabled}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <option value="">Selecciona un canal</option>
-              {channels.map((ch) => (
-                <option key={ch.id} value={ch.id}>
-                  #{ch.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSettings({ ...settings, channelId: val || null })}
+              options={channelOptions}
+              placeholder="Selecciona un canal"
+              icon={Hash}
+              renderOption={(opt) => (
+                <div className="flex items-center space-x-2">
+                  <Hash className="w-4 h-4 text-gray-400" />
+                  <span>{opt.name}</span>
+                </div>
+              )}
+              emptyMessage="No se encontraron canales"
+            />
             <p className="text-xs text-gray-400 mt-1">
               Canal donde se enviarán los mensajes de cumpleaños
             </p>
@@ -270,25 +275,19 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
 
           {/* Rol a Mencionar */}
           <div>
-            <label htmlFor="birthday-role" className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Mencionar rol (opcional)
             </label>
-            <select
-              id="birthday-role"
+            <SearchableSelect
               value={settings.mentionRole || ''}
-              onChange={(e) => setSettings({ ...settings, mentionRole: e.target.value || null })}
-              disabled={!settings.enabled}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <option value="">Sin mención</option>
-              <option value="@everyone">@everyone</option>
-              <option value="@here">@here</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  @{role.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSettings({ ...settings, mentionRole: val || null })}
+              options={roleOptions}
+              placeholder="Sin mención"
+              renderOption={(opt) => (
+                <span>@{opt.name}</span>
+              )}
+              emptyMessage="No se encontraron roles"
+            />
             <p className="text-xs text-gray-400 mt-1">
               Rol que será mencionado en el mensaje de cumpleaños
             </p>
@@ -394,24 +393,6 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
           </div>
         </div>
       )}
-
-      {/* Botones de Acción */}
-      <div className="flex items-center justify-between pt-4">
-        <button
-          onClick={handleReset}
-          disabled={saving}
-          className="px-6 py-3 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center space-x-2"
-        >
-          <RotateCcw className="w-5 h-5" />
-          <span>Resetear</span>
-        </button>
-
-        <SaveButton
-          onClick={handleSave}
-          saving={saving}
-          hasChanges={hasChanges}
-        />
-      </div>
 
       {/* Advertencia */}
       {settings.enabled && !settings.channelId && (
