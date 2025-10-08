@@ -1,8 +1,8 @@
 // frontend/src/components/guild-settings/BirthdaySettings.jsx
 import { useState, useEffect } from 'react';
-import { Cake, AlertCircle, Hash } from 'lucide-react';
+import { Cake, AlertCircle, Hash, Users } from 'lucide-react';
 import { StickyActionBar } from '../ui/StickyActionBar';
-import { SearchableSelect } from '../ui/SearchableSelect';
+import { StyledSelect } from '../ui/StyledSelect';
 import { SectionCard } from '../ui/SectionCard';
 import { InfoAlert } from '../ui/InfoAlert';
 import toast from 'react-hot-toast';
@@ -150,11 +150,12 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
   }
 
   // Preparar opciones para los selects
-  const channelOptions = channels.map(ch => ({ id: ch.id, name: ch.name }));
+  const channelOptions = channels.map(ch => ({ id: ch.id, name: `# ${ch.name}` }));
   const roleOptions = [
+    { id: '', name: 'Sin mención' },
     { id: '@everyone', name: '@everyone' },
     { id: '@here', name: '@here' },
-    ...roles.map(r => ({ id: r.id, name: r.name }))
+    ...roles.map(r => ({ id: r.id, name: `@${r.name}` }))
   ];
 
   return (
@@ -212,7 +213,7 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
             </div>
             <button
               onClick={() => setSettings({ ...settings, enabled: !settings.enabled })}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
                 settings.enabled ? 'bg-pink-500' : 'bg-gray-600'
               }`}
             >
@@ -229,19 +230,13 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Canal de cumpleaños
             </label>
-            <SearchableSelect
+            <StyledSelect
               value={settings.channelId || ''}
               onChange={(val) => setSettings({ ...settings, channelId: val || null })}
               options={channelOptions}
               placeholder="Selecciona un canal"
               icon={Hash}
-              renderOption={(opt) => (
-                <div className="flex items-center space-x-2">
-                  <Hash className="w-4 h-4 text-gray-400" />
-                  <span>{opt.name}</span>
-                </div>
-              )}
-              emptyMessage="No se encontraron canales"
+              disabled={!settings.enabled}
             />
             <p className="text-xs text-gray-400 mt-1">
               Canal donde se enviarán los mensajes de cumpleaños
@@ -260,7 +255,7 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
               disabled={!settings.enabled}
               rows={3}
               maxLength={1000}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+              className="w-full bg-gray-700/50 border-2 border-gray-600 rounded-lg px-4 py-3 text-white disabled:opacity-50 disabled:cursor-not-allowed resize-none focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 transition-all"
               placeholder="🎂 ¡Feliz cumpleaños {mention}! 🎉"
             />
             <div className="flex justify-between items-center mt-1">
@@ -278,15 +273,13 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Mencionar rol (opcional)
             </label>
-            <SearchableSelect
+            <StyledSelect
               value={settings.mentionRole || ''}
               onChange={(val) => setSettings({ ...settings, mentionRole: val || null })}
               options={roleOptions}
               placeholder="Sin mención"
-              renderOption={(opt) => (
-                <span>@{opt.name}</span>
-              )}
-              emptyMessage="No se encontraron roles"
+              icon={Users}
+              disabled={!settings.enabled}
             />
             <p className="text-xs text-gray-400 mt-1">
               Rol que será mencionado en el mensaje de cumpleaños
@@ -315,7 +308,7 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
             <button
               onClick={() => setSettings({ ...settings, embedEnabled: !settings.embedEnabled })}
               disabled={!settings.enabled}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                 settings.embedEnabled ? 'bg-purple-500' : 'bg-gray-600'
               }`}
             >
@@ -340,7 +333,7 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
                   value={settings.embedColor}
                   onChange={(e) => setSettings({ ...settings, embedColor: e.target.value })}
                   disabled={!settings.enabled}
-                  className="w-16 h-10 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-16 h-12 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-2 border-gray-600 bg-gray-700"
                 />
                 <input
                   type="text"
@@ -354,7 +347,7 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
                   }}
                   disabled={!settings.enabled}
                   maxLength={7}
-                  className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-gray-700/50 border-2 border-gray-600 rounded-lg px-4 py-3 text-white font-mono disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 transition-all"
                   placeholder="#FF69B4"
                 />
               </div>
