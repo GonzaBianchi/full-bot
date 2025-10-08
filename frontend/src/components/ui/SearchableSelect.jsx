@@ -1,3 +1,4 @@
+// frontend/src/components/ui/SearchableSelect.jsx
 import { useState, useRef, useEffect } from 'react';
 import { Search, ChevronDown, X } from 'lucide-react';
 
@@ -69,7 +70,7 @@ export function SearchableSelect({
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative z-[100]">
       <div
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full px-4 py-3 bg-gray-700/50 border-2 rounded-lg text-white cursor-pointer transition-all flex items-center justify-between ${
@@ -102,7 +103,7 @@ export function SearchableSelect({
 
       {isOpen && (
         <div className="absolute z-[9999] w-full mt-2 bg-gray-800 border-2 border-indigo-500 rounded-lg shadow-2xl overflow-hidden max-h-[300px]">
-          <div className="p-2 border-b border-gray-700 bg-gray-800 sticky top-0 z-10">
+          <div className="p-2 border-b border-gray-700 bg-gray-800 sticky top-0 z-[10000]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
