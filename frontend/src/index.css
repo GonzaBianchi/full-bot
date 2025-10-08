@@ -7,18 +7,17 @@
   --color-discord-red: #ed4245;
 }
 
-/* Asegurar que html y body tengan el fondo correcto y se extiendan */
+/* Asegurar que html y body tengan altura completa sin scroll */
 html, body {
-  min-height: 100vh;
   height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden; /* ✅ Sin scroll en el body principal */
   background: linear-gradient(to bottom right, #111827, #1f2937, #111827);
-  overflow-x: hidden;
 }
 
 #root {
-  min-height: 100vh;
+  height: 100%;
   background: transparent;
 }
 
@@ -34,28 +33,40 @@ html, body {
   z-index: 9999 !important;
 }
 
-/* Scroll suave para contenedores */
+/* Scroll suave para contenedores scrollables */
 .overflow-y-auto {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.5) rgba(31, 41, 55, 0.5);
 }
 
-/* Custom scrollbar para mejor apariencia */
-::-webkit-scrollbar {
+/* Custom scrollbar para mejor apariencia en Webkit (Chrome, Safari, Edge) */
+.overflow-y-auto::-webkit-scrollbar {
   width: 8px;
-  height: 8px;
 }
 
-::-webkit-scrollbar-track {
+.overflow-y-auto::-webkit-scrollbar-track {
   background: rgba(31, 41, 55, 0.5);
   border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb {
+.overflow-y-auto::-webkit-scrollbar-thumb {
   background: rgba(99, 102, 241, 0.5);
   border-radius: 4px;
+  transition: background 0.2s;
 }
 
-::-webkit-scrollbar-thumb:hover {
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.7);
+}
+
+/* Asegurar que el contenedor principal no tenga scroll */
+.overflow-hidden {
+  overflow: hidden !important;
+}
+
+/* Smooth transitions para interacciones */
+* {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
