@@ -12,12 +12,15 @@ import { authService } from './services/api'
 function AppContent({ user, onLogout }) {
   const location = useLocation();
   
+  // Determinar si la ruta actual necesita Navbar
+  const showNavbar = !location.pathname.includes('/leaderboard');
+  
   // Determinar si la ruta actual necesita layout con sidebar (GuildSettings)
   const isGuildSettingsRoute = location.pathname.includes('/guild/') && !location.pathname.includes('/leaderboard');
   
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
-      <Navbar user={user} onLogout={onLogout} />
+      {showNavbar && <Navbar user={user} onLogout={onLogout} />}
       <div className={`flex-1 ${isGuildSettingsRoute ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         <Routes>
           <Route path="/" element={<Home />} />
