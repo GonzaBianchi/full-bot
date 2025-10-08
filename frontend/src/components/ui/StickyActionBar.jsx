@@ -15,7 +15,7 @@ export function StickyActionBar({
       {/* Alerta de cambios sin guardar - Sticky */}
       {hasChanges && (
         <div className="sticky top-0 z-40 bg-yellow-500/10 border-b border-yellow-500/50 backdrop-blur-md">
-          <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="max-w-7xl mx-auto px-4 py-3 backdrop-blur-md rounded-xl">
             <div className="flex items-center space-x-3">
               <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
               <div>
@@ -45,7 +45,7 @@ export function StickyActionBar({
                 <button
                   onClick={onReset}
                   disabled={saving}
-                  className="px-4 py-2 bg-red-600/80 hover:bg-red-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center space-x-2 text-sm"
+                  className="px-4 py-2 cursor-pointer bg-red-600/80 hover:bg-red-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center space-x-2 text-sm"
                 >
                   <RotateCcw className="w-4 h-4" />
                   <span>{resetText}</span>
@@ -55,7 +55,7 @@ export function StickyActionBar({
               <button
                 onClick={onSave}
                 disabled={saving || !hasChanges}
-                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center space-x-2 shadow-lg text-sm"
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center space-x-2 shadow-lg text-sm cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 <span>{saving ? 'Guardando...' : saveText}</span>

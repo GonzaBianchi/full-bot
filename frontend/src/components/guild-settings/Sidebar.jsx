@@ -55,7 +55,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
         {/* Botón Volver */}
         <button
           onClick={() => navigate('/')}
-          className="flex items-center space-x-2 text-gray-400 hover:text-white mb-6 group cursor-pointer hover:scale-105 transition-all"
+          className="flex items-center space-x-2 text-gray-400 hover:text-white hover:border hover:border-gray-400 hover:rounded-lg mb-6 group cursor-pointer hover:scale-105 transition-all"
         >
           <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           <span>Volver</span>
@@ -66,7 +66,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
           <div className="mb-6 relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="w-full bg-gray-700/50 hover:bg-gray-700 rounded-lg p-3 transition-all border border-gray-600/50 hover:border-indigo-500/50"
+              className="w-full bg-gray-700/50 hover:bg-gray-700 rounded-lg hover:cursor-pointer p-3 transition-all border border-gray-600/50 hover:border-indigo-500/50"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -111,7 +111,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
                       <button
                         key={guild.id}
                         onClick={() => handleGuildChange(guild.id)}
-                        className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all ${
+                        className={`w-full hover:cursor-pointer flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all ${
                           guild.id === guildId
                             ? 'bg-indigo-500/20 text-indigo-400'
                             : 'text-gray-300 hover:bg-gray-700/50 hover:text-white'
