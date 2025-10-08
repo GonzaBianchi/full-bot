@@ -82,10 +82,10 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
           {isCollapsed && (
             <button
               onClick={() => navigate('/')}
-              className="w-full flex items-center justify-center px-4 py-3 rounded-lg transition-all hover:cursor-pointer"
+              className="w-full flex items-center justify-center px-4 py-3 hover:bg-gray-700/50 rounded-lg transition-all hover:cursor-pointer"
             >
               <div className='flex items-center'>
-                <ArrowLeft className="w-5 h-5 text-white hover:bg-gray-700/50" />
+                <ArrowLeft className="w-5 h-5 text-white" />
               </div>
             </button>
           )}
