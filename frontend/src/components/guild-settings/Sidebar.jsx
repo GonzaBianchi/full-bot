@@ -82,13 +82,13 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
           {isCollapsed && (
             <button
               onClick={() => navigate('/')}
-              className="w-full flex items-center justify-center p-3 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all cursor-pointer mb-4"
-              title="Volver"
+              className="w-full flex items-center justify-center px-4 py-3 rounded-lg transition-all hover:cursor-pointer"
             >
-              <ArrowLeft className="w-7 h-7" />
+              <div className='flex items-center'>
+                <ArrowLeft className="w-5 h-5" />
+              </div>
             </button>
           )}
-
           {/* Dropdown de Servidores - Solo visible cuando está expandido */}
           {currentGuild && !isCollapsed && (
             <div className="mb-6 relative" ref={dropdownRef}>
