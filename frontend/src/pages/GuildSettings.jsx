@@ -88,7 +88,7 @@ function GuildSettings() {
         />
 
         <main className="flex-1 p-8 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             {activeSection === 'xp-system' && (
               <XPSystemSettings 
                 guildId={guildId} 

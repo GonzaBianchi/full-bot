@@ -472,7 +472,7 @@ function RoleMenus() {
           </div>
         </div>
       ) : (
-        /* Lista de menús */
+        /* Lista de menús con GRID */
         <div>
           {menus.length === 0 ? (
             <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-12 text-center">
@@ -488,103 +488,103 @@ function RoleMenus() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {menus.map(m => (
-                <div key={m._id} className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 hover:border-indigo-500/50 transition-all">
+                <div key={m._id} className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50 p-6 hover:border-indigo-500/50 transition-all flex flex-col">
                   <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h3 className="text-xl font-bold text-white">{m.title}</h3>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2 mb-2 flex-wrap gap-1">
+                        <h3 className="text-lg font-bold text-white truncate">{m.title}</h3>
                         {m.exclusive && (
-                          <span className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs font-medium rounded border border-purple-500/50">
+                          <span className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs font-medium rounded border border-purple-500/50 whitespace-nowrap">
                             EXCLUSIVO
                           </span>
                         )}
                         {m.published && (
-                          <span className="px-2 py-1 bg-green-500/20 text-green-300 text-xs font-medium rounded border border-green-500/50">
+                          <span className="px-2 py-1 bg-green-500/20 text-green-300 text-xs font-medium rounded border border-green-500/50 whitespace-nowrap">
                             PUBLICADO
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center space-x-4 text-sm text-gray-400">
+                      <div className="flex flex-col space-y-1 text-sm text-gray-400">
                         <div className="flex items-center space-x-1">
-                          <Hash className="w-4 h-4" />
-                          <span>{getChannelName(m.channelId)}</span>
+                          <Hash className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{getChannelName(m.channelId)}</span>
                         </div>
                         <div className="flex items-center space-x-1">
-                          <Shield className="w-4 h-4" />
+                          <Shield className="w-4 h-4 flex-shrink-0" />
                           <span>{m.options?.length || 0} roles</span>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      {!m.published && (
-                        <button 
-                          onClick={() => publish(m)} 
-                          disabled={publishing === m._id}
-                          className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white rounded-lg transition-colors flex items-center space-x-2 cursor-pointer disabled:cursor-not-allowed"
-                          title="Publicar menú en el canal"
-                        >
-                          {publishing === m._id ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span>Publicando...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Send className="w-4 h-4" />
-                              <span>Publicar</span>
-                            </>
-                          )}
-                        </button>
-                      )}
-                      <button 
-                        onClick={() => edit(m)} 
-                        className="p-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg transition-colors cursor-pointer"
-                        title="Editar menú"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </button>
-                      <button 
-                        onClick={() => remove(m._id)} 
-                        className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors cursor-pointer"
-                        title="Eliminar menú"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
                     </div>
                   </div>
 
                   {/* Preview de opciones */}
                   {m.options && m.options.length > 0 && (
-                    <div className="bg-gray-700/30 rounded-lg p-4 space-y-2">
-                      <p className="text-xs font-medium text-gray-400 mb-3">Vista previa del menú:</p>
-                      {m.options.map((opt, idx) => {
-                        const emojiDisplay = getEmojiDisplay(opt.emojiIdentifier);
-                        const isCustom = isCustomEmoji(opt.emojiIdentifier);
-                        
-                        return (
-                          <div key={idx} className="flex items-center space-x-3 text-sm">
-                            {isCustom ? (
-                              <img 
-                                src={emojiDisplay} 
-                                alt="emoji" 
-                                className="w-6 h-6" 
-                              />
-                            ) : (
-                              <span className="text-xl">{emojiDisplay}</span>
-                            )}
-                            <span className="text-gray-400">—</span>
-                            <span className="text-indigo-400 font-medium">@{getRoleName(opt.roleId)}</span>
-                            {opt.label && (
-                              <span className="text-gray-400 text-xs">— {opt.label}</span>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="bg-gray-700/30 rounded-lg p-3 space-y-2 mb-4 flex-1">
+                      <p className="text-xs font-medium text-gray-400 mb-2">Vista previa:</p>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {m.options.map((opt, idx) => {
+                          const emojiDisplay = getEmojiDisplay(opt.emojiIdentifier);
+                          const isCustom = isCustomEmoji(opt.emojiIdentifier);
+                          
+                          return (
+                            <div key={idx} className="flex items-center space-x-2 text-sm">
+                              {isCustom ? (
+                                <img 
+                                  src={emojiDisplay} 
+                                  alt="emoji" 
+                                  className="w-5 h-5 flex-shrink-0" 
+                                />
+                              ) : (
+                                <span className="text-lg flex-shrink-0">{emojiDisplay}</span>
+                              )}
+                              <span className="text-gray-400 flex-shrink-0">—</span>
+                              <span className="text-indigo-400 font-medium truncate">@{getRoleName(opt.roleId)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
+
+                  {/* Botones de acción */}
+                  <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-700/50">
+                    {!m.published && (
+                      <button 
+                        onClick={() => publish(m)} 
+                        disabled={publishing === m._id}
+                        className="px-3 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white rounded-lg transition-colors flex items-center space-x-1.5 cursor-pointer disabled:cursor-not-allowed text-sm"
+                        title="Publicar menú en el canal"
+                      >
+                        {publishing === m._id ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Publicando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4" />
+                            <span>Publicar</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => edit(m)} 
+                      className="p-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg transition-colors cursor-pointer"
+                      title="Editar menú"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => remove(m._id)} 
+                      className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors cursor-pointer"
+                      title="Eliminar menú"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
