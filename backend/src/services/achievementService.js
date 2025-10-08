@@ -12,6 +12,9 @@ class AchievementService {
     this.notificationCache = new Map(); // key: `${userId}-${guildId}-${achievementId}-${tier}`
     this.NOTIFICATION_COOLDOWN = 10000; // 10 segundos de cooldown
     // ===========================================================================
+        // ========== NUEVO: Lock para prevenir procesamiento concurrente ==========
+    this.processingLocks = new Map(); // key: `${userId}-${guildId}`
+    // =========================================================================
   }
 
   setClient(client) {
@@ -143,95 +146,146 @@ class AchievementService {
   }
 
   async checkAndUnlockAchievements(userAch, type, channelId = null) {
-    const achievements = await Achievement.find({ 
-      guildId: userAch.guildId, 
-      type, 
-      enabled: true 
-    });
-
-    // ========== NUEVO: Array para guardar los cambios y aplicarlos al final ==========
-    const unlockedTiers = [];
-    // =================================================================================
-
-    for (const achievement of achievements) {
-      let progress = userAch.achievements.find(
-        a => a.achievementId.toString() === achievement._id.toString()
-      );
-
-      if (!progress) {
-        progress = {
-          achievementId: achievement._id,
-          currentValue: 0,
-          unlockedTiers: []
-        };
-        userAch.achievements.push(progress);
+    // ========== NUEVO: Lock para prevenir procesamiento concurrente ==========
+    const lockKey = `${userAch.userId}-${userAch.guildId}`;
+    
+    if (this.processingLocks.get(lockKey)) {
+      logger.debug(`Achievement check ya en proceso para ${lockKey}, ignorando duplicado`);
+      return;
+    }
+    
+    this.processingLocks.set(lockKey, true);
+    
+    try {
+      // ========== FIX: Recargar desde DB para tener datos frescos ==========
+      const freshUserAch = await UserAchievement.findOne({ 
+        userId: userAch.userId, 
+        guildId: userAch.guildId 
+      });
+      
+      if (!freshUserAch) {
+        logger.warn(`UserAchievement no encontrado para ${userAch.userId} en ${userAch.guildId}`);
+        return;
       }
+      // =====================================================================
 
-      switch (type) {
-        case 'messages':
-          progress.currentValue = userAch.stats.totalMessages;
-          break;
-        case 'reactions':
-          progress.currentValue = userAch.stats.totalReactions;
-          break;
-        case 'reactions_given':
-          progress.currentValue = userAch.stats.totalReactionsGiven;
-          break;
-        case 'voice_time':
-          progress.currentValue = userAch.stats.totalVoiceTime;
-          break;
-        case 'boost':
-          progress.currentValue = userAch.stats.hasBoosted ? 1 : 0;
-          break;
-      }
+      const achievements = await Achievement.find({ 
+        guildId: freshUserAch.guildId, 
+        type, 
+        enabled: true 
+      });
 
-      for (const tier of achievement.tiers.sort((a, b) => a.tier - b.tier)) {
-        // ========== FIX: Verificar ANTES de añadir ==========
-        if (
-          progress.currentValue >= tier.target && 
-          !progress.unlockedTiers.includes(tier.tier)
-        ) {
-          progress.unlockedTiers.push(tier.tier);
-          progress.lastUnlockedAt = new Date();
+      const unlockedTiers = [];
+
+      for (const achievement of achievements) {
+        let progress = freshUserAch.achievements.find(
+          a => a.achievementId.toString() === achievement._id.toString()
+        );
+
+        if (!progress) {
+          progress = {
+            achievementId: achievement._id,
+            currentValue: 0,
+            unlockedTiers: []
+          };
+          freshUserAch.achievements.push(progress);
+        }
+
+        // Actualizar currentValue
+        switch (type) {
+          case 'messages':
+            progress.currentValue = freshUserAch.stats.totalMessages;
+            break;
+          case 'reactions':
+            progress.currentValue = freshUserAch.stats.totalReactions;
+            break;
+          case 'reactions_given':
+            progress.currentValue = freshUserAch.stats.totalReactionsGiven;
+            break;
+          case 'voice_time':
+            progress.currentValue = freshUserAch.stats.totalVoiceTime;
+            break;
+          case 'boost':
+            progress.currentValue = freshUserAch.stats.hasBoosted ? 1 : 0;
+            break;
+        }
+
+        for (const tier of achievement.tiers.sort((a, b) => a.tier - b.tier)) {
+          // ========== FIX: Verificación más estricta ==========
+          const alreadyUnlocked = progress.unlockedTiers.includes(tier.tier);
+          const hasReachedTarget = progress.currentValue >= tier.target;
           
-          logger.info(
-            `Usuario ${userAch.userId} desbloqueó: ${achievement.name} - ${tier.title} en guild ${userAch.guildId}`
+          // ========== NUEVO: Verificar también en cache ==========
+          const cacheKey = `${freshUserAch.userId}-${freshUserAch.guildId}-${achievement._id}-${tier.tier}`;
+          const recentlyNotified = this.notificationCache.has(cacheKey);
+          // ======================================================
+          
+          if (hasReachedTarget && !alreadyUnlocked && !recentlyNotified) {
+            // ========== IMPORTANTE: Marcar en cache ANTES de procesar ==========
+            this.notificationCache.set(cacheKey, Date.now());
+            // ===================================================================
+            
+            progress.unlockedTiers.push(tier.tier);
+            progress.lastUnlockedAt = new Date();
+            
+            logger.info(
+              `✅ Usuario ${freshUserAch.userId} desbloqueó: ${achievement.name} - ${tier.title} (tier ${tier.tier}) en guild ${freshUserAch.guildId}`
+            );
+            
+            unlockedTiers.push({
+              userId: freshUserAch.userId,
+              guildId: freshUserAch.guildId,
+              achievement,
+              tier,
+              channelId
+            });
+          } else if (hasReachedTarget && alreadyUnlocked) {
+            logger.debug(`Tier ${tier.tier} de ${achievement.name} ya desbloqueado para ${freshUserAch.userId}`);
+          }
+        }
+      }
+
+      // Guardar SOLO UNA VEZ todos los cambios
+      if (unlockedTiers.length > 0) {
+        await freshUserAch.save();
+        
+        logger.info(`💾 Guardados ${unlockedTiers.length} nuevos desbloqueos para ${freshUserAch.userId}`);
+        
+        // Enviar notificaciones después de guardar
+        for (const unlock of unlockedTiers) {
+          // Pequeño delay entre notificaciones para evitar rate limits
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          await this.sendAchievementNotification(
+            unlock.userId,
+            unlock.guildId,
+            unlock.achievement,
+            unlock.tier,
+            unlock.channelId
           );
           
-          // Guardar para procesar después
-          unlockedTiers.push({
-            userId: userAch.userId,
-            guildId: userAch.guildId,
-            achievement,
-            tier,
-            channelId
-          });
-          // ==================================================
+          if (unlock.tier.rewardRoleId) {
+            await this.assignRewardRole(
+              unlock.userId, 
+              unlock.guildId, 
+              unlock.tier.rewardRoleId
+            );
+          }
         }
       }
-    }
-
-    // ========== NUEVO: Guardar primero, notificar después ==========
-    if (unlockedTiers.length > 0) {
-      // Guardar los cambios en la BD ANTES de enviar notificaciones
-      await userAch.save();
       
-      // Ahora enviar las notificaciones
-      for (const unlock of unlockedTiers) {
-        await this.sendAchievementNotification(
-          unlock.userId,
-          unlock.guildId,
-          unlock.achievement,
-          unlock.tier,
-          unlock.channelId
-        );
-        
-        if (unlock.tier.rewardRoleId) {
-          await this.assignRewardRole(unlock.userId, unlock.guildId, unlock.tier.rewardRoleId);
-        }
-      }
+      // Actualizar el objeto original con los cambios
+      userAch.achievements = freshUserAch.achievements;
+      userAch.stats = freshUserAch.stats;
+      
+    } catch (error) {
+      logger.error('Error en checkAndUnlockAchievements:', error);
+      throw error;
+    } finally {
+      // ========== NUEVO: Liberar lock ==========
+      this.processingLocks.delete(lockKey);
+      // =========================================
     }
-    // ================================================================
   }
 
   async sendAchievementNotification(userId, guildId, achievement, tier, fallbackChannelId = null) {
@@ -240,21 +294,21 @@ class AchievementService {
         return;
       }
 
-      // ========== NUEVO: Verificar cache de notificaciones ==========
+      // ========== Verificación de cache al inicio ==========
       const cacheKey = `${userId}-${guildId}-${achievement._id}-${tier.tier}`;
       const lastNotification = this.notificationCache.get(cacheKey);
       
       if (lastNotification) {
         const timeSinceLastNotification = Date.now() - lastNotification;
         if (timeSinceLastNotification < this.NOTIFICATION_COOLDOWN) {
-          logger.info(`Notificación de logro duplicada prevenida para ${userId} - ${achievement.name} tier ${tier.tier}`);
+          logger.debug(`⏭️  Notificación duplicada prevenida: ${achievement.name} tier ${tier.tier} para ${userId}`);
           return;
         }
       }
       
-      // Marcar que estamos enviando esta notificación
+      // Actualizar timestamp (ya debería estar pero por si acaso)
       this.notificationCache.set(cacheKey, Date.now());
-      // ==============================================================
+      // =====================================================
 
       if (!this.discordClient) {
         logger.warn('Discord client no disponible para notificación de logro');
@@ -262,28 +316,36 @@ class AchievementService {
       }
 
       const guild = await this.discordClient.guilds.fetch(guildId).catch(() => null);
-      if (!guild) return;
+      if (!guild) {
+        logger.warn(`Guild ${guildId} no encontrado`);
+        return;
+      }
 
       const member = await guild.members.fetch(userId).catch(() => null);
-      if (!member) return;
+      if (!member) {
+        logger.warn(`Member ${userId} no encontrado en guild ${guildId}`);
+        return;
+      }
 
-      // Obtener configuración del servidor
       const guildConfig = await GuildModel.findOne({ guildId }).lean();
       
-      // Prioridad del canal: 1) Global del servidor, 2) Específico del logro, 3) Canal donde se desbloqueó
       let notificationChannelId = guildConfig?.achievementsConfig?.notificationChannelId 
         || achievement.notifications.channelId 
         || fallbackChannelId;
       
-      if (!notificationChannelId) return;
+      if (!notificationChannelId) {
+        logger.debug('No hay canal de notificación configurado');
+        return;
+      }
 
       const channel = await guild.channels.fetch(notificationChannelId).catch(() => null);
-      if (!channel || !channel.isTextBased()) return;
+      if (!channel || !channel.isTextBased()) {
+        logger.warn(`Canal ${notificationChannelId} no válido para notificaciones`);
+        return;
+      }
 
-      // Obtener configuración de imagen
       const imageConfig = guildConfig?.images?.achievementNotification || {};
 
-      // Generar imagen de notificación
       const imageBuffer = await generateAchievementNotification({
         user: member.user,
         achievement,
@@ -295,7 +357,6 @@ class AchievementService {
 
       const attachment = new AttachmentBuilder(imageBuffer, { name: 'achievement.png' });
 
-      // Preparar mensaje de texto - Usar mensaje global si no hay específico
       let message = achievement.notifications.message 
         || guildConfig?.achievementsConfig?.defaultMessage 
         || '{mention} ha desbloqueado: **{achievement}** - {tier}!';
@@ -315,13 +376,13 @@ class AchievementService {
         allowedMentions: { users: [userId] }
       });
 
-      logger.info(`Notificación de logro enviada a ${member.user.tag} en ${channel.name}`);
+      logger.info(`📢 Notificación enviada: ${achievement.name} tier ${tier.tier} a ${member.user.tag}`);
+      
     } catch (error) {
       logger.error('Error enviando notificación de logro:', error);
-      // ========== NUEVO: Limpiar cache en caso de error ==========
+      // Limpiar cache en caso de error para permitir reintento
       const cacheKey = `${userId}-${guildId}-${achievement._id}-${tier.tier}`;
       this.notificationCache.delete(cacheKey);
-      // ===========================================================
     }
   }
 
