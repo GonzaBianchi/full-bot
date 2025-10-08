@@ -14,8 +14,8 @@ export function StickyActionBar({
     <>
       {/* Alerta de cambios sin guardar - Sticky */}
       {hasChanges && (
-        <div className="sticky top-0 z-40 bg-yellow-500/10 border-b border-yellow-500/50 backdrop-blur-md">
-          <div className="max-w-7xl mx-auto px-4 py-3 backdrop-blur-md rounded-xl">
+        <div className="sticky top-0 z-40 bg-yellow-500/10 border-b border-yellow-500/30 backdrop-blur-xl">
+          <div className="max-w-7xl mx-auto px-4 py-3">
             <div className="flex items-center space-x-3">
               <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
               <div>
@@ -28,8 +28,8 @@ export function StickyActionBar({
       )}
 
       {/* Botones de acción - Sticky */}
-      <div className="sticky top-0 z-50 bg-gray-900/95 border-b border-gray-700/50 backdrop-blur-md shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-3 backdrop-blur-md rounded-xl">
+      <div className="sticky top-0 z-50 bg-gray-900/70 border-b border-gray-700/30 backdrop-blur-xl shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               {hasChanges && (
