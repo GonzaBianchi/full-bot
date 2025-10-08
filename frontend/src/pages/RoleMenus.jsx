@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { roleMenuService, guildService } from '../services/api';
 import { Plus, Trash2, Edit, Send, AlertCircle, Shield, Hash, Smile, X, Save, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 
 function RoleMenus() {
   const { guildId } = useParams();
@@ -105,7 +106,7 @@ function RoleMenus() {
     try {
       if (editing) {
         await roleMenuService.update(guildId, editing._id, form);
-        toast.success('✅ Menú actualizado exitosamente');
+        toast.success('✅ Menú actualizado y re-publicado exitosamente');
       } else {
         await roleMenuService.create(guildId, form);
         toast.success('✅ Menú creado exitosamente');
@@ -185,10 +186,8 @@ function RoleMenus() {
   const getEmojiDisplay = (emojiIdentifier) => {
     const emoji = resources.emojis.find(e => e.identifier === emojiIdentifier);
     if (emoji && emoji.id) {
-      // Retornar URL de Discord CDN para emojis custom
       return `https://cdn.discordapp.com/emojis/${emoji.id}.${emoji.animated ? 'gif' : 'png'}`;
     }
-    // Para emojis unicode, retornar el carácter
     return emojiIdentifier.split(':')[0] || emojiIdentifier;
   };
 
@@ -238,7 +237,7 @@ function RoleMenus() {
               <li>• Puedes agregar hasta {MAX_OPTIONS} roles por menú (límite de Discord)</li>
               <li>• El modo exclusivo permite que solo se pueda tener un rol del menú a la vez</li>
               <li>• Los emojis pueden ser del servidor o emojis unicode estándar</li>
-              <li>• <strong>Para quitar roles en modo exclusivo, simplemente quita tu reacción</strong></li>
+              <li>• <strong>Si editas un menú publicado, se actualizará automáticamente en el canal</strong></li>
             </ul>
           </div>
         </div>
@@ -273,30 +272,25 @@ function RoleMenus() {
             />
           </div>
 
-          {/* Canal */}
+          {/* Canal con búsqueda */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Canal donde se publicará *
             </label>
-            <div className="relative">
-              <select 
-                value={form.channelId} 
-                onChange={e => setForm({...form, channelId: e.target.value})} 
-                className="w-full px-4 py-3 bg-gray-700/50 border-2 border-gray-600 rounded-lg text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-              >
-                <option value="">Seleccionar canal...</option>
-                {resources.channels.map(c => (
-                  <option key={c.id} value={c.id} className="bg-gray-800">
-                    # {c.name}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </div>
+            <SearchableSelect
+              value={form.channelId}
+              onChange={(val) => setForm({...form, channelId: val})}
+              options={resources.channels}
+              placeholder="Seleccionar canal..."
+              icon={Hash}
+              renderOption={(channel) => (
+                <div className="flex items-center space-x-2">
+                  <Hash className="w-4 h-4 text-gray-400" />
+                  <span>{channel.name}</span>
+                </div>
+              )}
+              renderSelected={(channel) => channel ? `# ${channel.name}` : ''}
+            />
           </div>
 
           {/* Modo exclusivo */}
@@ -359,68 +353,76 @@ function RoleMenus() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Emoji */}
+                      {/* Emoji con búsqueda */}
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Emoji *</label>
-                        <div className="relative">
-                          <select 
-                            value={opt.emojiIdentifier} 
-                            onChange={e => updateOption(idx, 'emojiIdentifier', e.target.value)} 
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                          >
-                            <option value="">Seleccionar emoji...</option>
-                            {resources.emojis.map(em => {
-                              const displayText = em.id 
-                                ? `${em.name} ${em.animated ? '(anim)' : '(custom)'}`
-                                : `${em.identifier} ${em.name}`;
-                              
-                              return (
-                                <option key={em.identifier} value={em.identifier} className="bg-gray-800">
-                                  {displayText}
-                                </option>
-                              );
-                            })}
-                          </select>
-                          {opt.emojiIdentifier && (
-                            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                              {(() => {
-                                const selectedEmoji = resources.emojis.find(e => e.identifier === opt.emojiIdentifier);
-                                if (selectedEmoji && selectedEmoji.id) {
-                                  const emojiUrl = `https://cdn.discordapp.com/emojis/${selectedEmoji.id}.${selectedEmoji.animated ? 'gif' : 'png'}`;
-                                  return <img src={emojiUrl} alt="emoji" className="w-5 h-5 mr-2" />;
-                                } else if (selectedEmoji) {
-                                  return <span className="text-lg mr-2">{selectedEmoji.identifier}</span>;
-                                }
-                                return null;
-                              })()}
+                        <SearchableSelect
+                          value={opt.emojiIdentifier}
+                          onChange={(val) => updateOption(idx, 'emojiIdentifier', val)}
+                          options={resources.emojis.map(e => ({
+                            id: e.identifier,
+                            value: e.identifier,
+                            name: e.name,
+                            label: e.id ? `${e.name} ${e.animated ? '(anim)' : '(custom)'}` : `${e.identifier} ${e.name}`,
+                            emojiId: e.id,
+                            animated: e.animated,
+                            url: e.url
+                          }))}
+                          placeholder="Seleccionar emoji..."
+                          icon={Smile}
+                          renderOption={(emoji) => (
+                            <div className="flex items-center space-x-2">
+                              {emoji.emojiId ? (
+                                <img 
+                                  src={`https://cdn.discordapp.com/emojis/${emoji.emojiId}.${emoji.animated ? 'gif' : 'png'}`}
+                                  alt={emoji.name}
+                                  className="w-5 h-5"
+                                />
+                              ) : (
+                                <span className="text-lg">{emoji.value}</span>
+                              )}
+                              <span className="text-sm">{emoji.label}</span>
                             </div>
                           )}
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
-                            <Smile className="w-4 h-4" />
-                          </div>
-                        </div>
+                          renderSelected={(emoji) => {
+                            if (!emoji) return '';
+                            if (emoji.emojiId) {
+                              return (
+                                <div className="flex items-center space-x-2">
+                                  <img 
+                                    src={`https://cdn.discordapp.com/emojis/${emoji.emojiId}.${emoji.animated ? 'gif' : 'png'}`}
+                                    alt={emoji.name}
+                                    className="w-5 h-5"
+                                  />
+                                  <span>{emoji.name}</span>
+                                </div>
+                              );
+                            }
+                            return emoji.value;
+                          }}
+                        />
                       </div>
 
-                      {/* Rol */}
+                      {/* Rol con búsqueda */}
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Rol *</label>
-                        <div className="relative">
-                          <select 
-                            value={opt.roleId} 
-                            onChange={e => updateOption(idx, 'roleId', e.target.value)} 
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                          >
-                            <option value="">Seleccionar rol...</option>
-                            {resources.roles.map(r => (
-                              <option key={r.id} value={r.id} className="bg-gray-800">
-                                {r.name}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
-                            <Shield className="w-4 h-4" />
-                          </div>
-                        </div>
+                        <SearchableSelect
+                          value={opt.roleId}
+                          onChange={(val) => updateOption(idx, 'roleId', val)}
+                          options={resources.roles}
+                          placeholder="Seleccionar rol..."
+                          icon={Shield}
+                          renderOption={(role) => (
+                            <div className="flex items-center space-x-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: role.color || '#99AAB5' }}
+                              />
+                              <span>{role.name}</span>
+                            </div>
+                          )}
+                          renderSelected={(role) => role ? role.name : ''}
+                        />
                       </div>
                     </div>
 

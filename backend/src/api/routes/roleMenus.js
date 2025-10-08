@@ -9,6 +9,80 @@ const router = express.Router({ mergeParams: true });
 
 const MAX_OPTIONS = 20; // Límite de Discord para reacciones
 
+// Función auxiliar para construir el embed
+function buildRoleMenuEmbed(menu, guild) {
+  let description = 'Reacciona con los emojis para obtener o quitar roles\n\n';
+
+  for (const opt of menu.options) {
+    // Determinar el emoji display
+    let emojiDisplay = opt.emojiIdentifier;
+    if (opt.emojiId) {
+      // Verificar si es animado buscando el emoji en el servidor
+      const guildEmoji = guild.emojis.cache.get(opt.emojiId);
+      const isAnimated = guildEmoji?.animated || false;
+      
+      const emojiParts = opt.emojiIdentifier.split(':');
+      const emojiName = emojiParts[0] || 'emoji';
+      
+      // Formato correcto para emojis animados y estáticos
+      emojiDisplay = isAnimated ? `<a:${emojiName}:${opt.emojiId}>` : `<:${emojiName}:${opt.emojiId}>`;
+    }
+    
+    // Usar mención de rol: <@&roleId>
+    const roleMention = `<@&${opt.roleId}>`;
+    
+    // Si hay label, usarlo; si no, solo mostrar emoji y rol con guion medio y espacios
+    if (opt.label && opt.label.trim()) {
+      description += `${emojiDisplay}  —  ${roleMention}  —  ${opt.label}\n`;
+    } else {
+      description += `${emojiDisplay}  —  ${roleMention}\n`;
+    }
+  }
+
+  return new EmbedBuilder()
+    .setTitle(menu.title)
+    .setColor(0x5865F2) // Color Discord blurple
+    .setDescription(description)
+    .setTimestamp()
+    .setFooter({ 
+      text: menu.exclusive 
+        ? '⚠️ Modo Exclusivo: Solo puedes tener un rol de este menú' 
+        : 'Puedes tener múltiples roles de este menú' 
+    });
+}
+
+// Función auxiliar para agregar reacciones
+async function addReactions(message, options) {
+  const failedReactions = [];
+  
+  for (const opt of options) {
+    try {
+      let emojiToReact = opt.emojiIdentifier;
+      
+      // Si tiene emojiId, es un emoji custom
+      if (opt.emojiId) {
+        emojiToReact = opt.emojiId;
+      } else {
+        // Si no tiene ID pero contiene ':', tomar la parte del nombre
+        const parts = opt.emojiIdentifier.split(':');
+        if (parts.length > 1) {
+          emojiToReact = parts[0];
+        }
+      }
+      
+      await message.react(emojiToReact);
+      
+      // Pequeño delay para evitar rate limits
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (e) {
+      logger.warn(`Error reaccionando con emoji ${opt.emojiIdentifier}:`, e.message);
+      failedReactions.push(opt.emojiIdentifier);
+    }
+  }
+  
+  return failedReactions;
+}
+
 // Listar role menus del guild
 router.get('/:guildId/role-menus', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
@@ -129,6 +203,10 @@ router.put('/:guildId/role-menus/:id', isAuthenticated, hasGuildPermission, [
     const { guildId, id } = req.params;
     const update = { ...req.body };
 
+    // Buscar el menú existente
+    const existingMenu = await RoleMenu.findOne({ _id: id, guildId });
+    if (!existingMenu) return res.status(404).json({ error: 'Role menu no encontrado' });
+
     // Si hay opciones, procesarlas
     if (update.options && Array.isArray(update.options)) {
       update.options = update.options.map(opt => {
@@ -153,8 +231,56 @@ router.put('/:guildId/role-menus/:id', isAuthenticated, hasGuildPermission, [
       update, 
       { new: true }
     );
-    
-    if (!menu) return res.status(404).json({ error: 'Role menu no encontrado' });
+
+    // Si el menú ya estaba publicado, re-publicarlo automáticamente
+    if (existingMenu.published && existingMenu.messageId && req.discordClient) {
+      logger.info(`🔄 Re-publicando menú editado: ${id}`);
+      
+      try {
+        const guild = await req.discordClient.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+          const channel = await guild.channels.fetch(menu.channelId).catch(() => null);
+          
+          if (channel && channel.isTextBased()) {
+            // Intentar eliminar el mensaje anterior
+            try {
+              const oldMessage = await channel.messages.fetch(existingMenu.messageId).catch(() => null);
+              if (oldMessage) {
+                await oldMessage.delete().catch(err => {
+                  logger.warn(`No se pudo eliminar mensaje anterior: ${err.message}`);
+                });
+              }
+            } catch (deleteErr) {
+              logger.warn('Error eliminando mensaje anterior:', deleteErr.message);
+            }
+
+            // Verificar permisos del bot
+            const botMember = guild.members.me;
+            const permissions = channel.permissionsFor(botMember);
+            
+            if (permissions && permissions.has(['SendMessages', 'AddReactions', 'EmbedLinks'])) {
+              // Construir y enviar el nuevo embed
+              const embed = buildRoleMenuEmbed(menu, guild);
+              const newMessage = await channel.send({ embeds: [embed] });
+              
+              // Agregar reacciones
+              await addReactions(newMessage, menu.options);
+              
+              // Actualizar el messageId
+              menu.messageId = newMessage.id;
+              await menu.save();
+              
+              logger.info(`✅ Menú re-publicado exitosamente con nuevo mensaje: ${newMessage.id}`);
+            } else {
+              logger.warn('⚠️ El bot no tiene permisos para re-publicar el mensaje');
+            }
+          }
+        }
+      } catch (republishErr) {
+        logger.error('Error re-publicando menú:', republishErr);
+        // No fallar la actualización si falla la re-publicación
+      }
+    }
     
     logger.info(`Role menu actualizado: ${id} en guild ${guildId}`);
     res.json({ menu });
@@ -243,45 +369,8 @@ router.post('/:guildId/role-menus/:id/publish', isAuthenticated, hasGuildPermiss
       });
     }
 
-    // Construir descripción del embed con los roles
-    let description = 'Reacciona con los emojis para obtener o quitar roles\n\n';
-
-    for (const opt of menu.options) {
-      // Determinar el emoji display
-      let emojiDisplay = opt.emojiIdentifier;
-      if (opt.emojiId) {
-        // Verificar si es animado buscando el emoji en el servidor
-        const guildEmoji = guild.emojis.cache.get(opt.emojiId);
-        const isAnimated = guildEmoji?.animated || false;
-        
-        const emojiParts = opt.emojiIdentifier.split(':');
-        const emojiName = emojiParts[0] || 'emoji';
-        
-        // Formato correcto para emojis animados y estáticos
-        emojiDisplay = isAnimated ? `<a:${emojiName}:${opt.emojiId}>` : `<:${emojiName}:${opt.emojiId}>`;
-      }
-      
-      // Usar mención de rol: <@&roleId>
-      const roleMention = `<@&${opt.roleId}>`;
-      
-      // Si hay label, usarlo; si no, solo mostrar emoji y rol con guion medio y espacios
-      if (opt.label && opt.label.trim()) {
-        description += `${emojiDisplay}  —  ${roleMention}  —  ${opt.label}\n`;
-      } else {
-        description += `${emojiDisplay}  —  ${roleMention}\n`;
-      }
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle(menu.title)
-      .setColor(0x5865F2) // Color Discord blurple
-      .setDescription(description)
-      .setTimestamp()
-      .setFooter({ 
-        text: menu.exclusive 
-          ? '⚠️ Modo Exclusivo: Solo puedes tener un rol de este menú' 
-          : 'Puedes tener múltiples roles de este menú' 
-      });
+    // Construir embed
+    const embed = buildRoleMenuEmbed(menu, guild);
 
     // Enviar mensaje
     let sent;
@@ -293,31 +382,7 @@ router.post('/:guildId/role-menus/:id/publish', isAuthenticated, hasGuildPermiss
     }
 
     // Reaccionar con cada emoji
-    const failedReactions = [];
-    for (const opt of menu.options) {
-      try {
-        let emojiToReact = opt.emojiIdentifier;
-        
-        // Si tiene emojiId, es un emoji custom
-        if (opt.emojiId) {
-          emojiToReact = opt.emojiId;
-        } else {
-          // Si no tiene ID pero contiene ':', tomar la parte del nombre
-          const parts = opt.emojiIdentifier.split(':');
-          if (parts.length > 1) {
-            emojiToReact = parts[0];
-          }
-        }
-        
-        await sent.react(emojiToReact);
-        
-        // Pequeño delay para evitar rate limits
-        await new Promise(resolve => setTimeout(resolve, 300));
-      } catch (e) {
-        logger.warn(`Error reaccionando con emoji ${opt.emojiIdentifier}:`, e.message);
-        failedReactions.push(opt.emojiIdentifier);
-      }
-    }
+    const failedReactions = await addReactions(sent, menu.options);
 
     // Guardar messageId y marcar como publicado
     menu.messageId = sent.id;
