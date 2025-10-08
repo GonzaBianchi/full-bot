@@ -186,7 +186,7 @@ router.get('/:guildId/resources', isAuthenticated, hasGuildPermission, async (re
         identifier: e.id ? `${e.name}:${e.id}` : e.name,
         // mention representa cómo se vería en un mensaje (<:name:id> o <a:name:id> para animados)
         mention: e.toString(),
-        url: e.url
+        url: e.imageURL()
       }));
       
       // Agregar algunos emojis unicode comunes

@@ -3,8 +3,8 @@ import { Zap } from 'lucide-react';
 import { useGeneralSettings } from '../../hooks/useGeneralSettings';
 import { useNotificationSettings } from '../../hooks/useNotificationSettings';
 import { useRoleSettings } from '../../hooks/useRoleSettings';
-import { UnsavedChangesAlert } from '../ui/UnsavedChangesAlert';
-import { SaveButton } from '../ui/SaveButton';
+import { StickyActionBar } from '../ui/StickyActionBar';
+import { StyledSelect } from '../ui/StyledSelect';
 import { XPMultiplier } from './XPMultiplier';
 import { IgnoredChannels } from './IgnoredChannels';
 import { LevelUpConfig } from './LevelUpConfig';
@@ -25,6 +25,12 @@ export function XPSystemSettings({ guildId, config, channels, roles }) {
     notificationSettings.hasChanges || 
     roleSettings.hasChanges;
 
+  // Combinar el estado de guardando
+  const saving = 
+    generalSettings.saving || 
+    notificationSettings.saving || 
+    roleSettings.saving;
+
   // Función para guardar todo
   const handleSaveAll = async () => {
     const results = await Promise.all([
@@ -34,6 +40,13 @@ export function XPSystemSettings({ guildId, config, channels, roles }) {
     ]);
     
     return results.every(r => r === true);
+  };
+
+  // Función para resetear/descartar cambios
+  const handleReset = () => {
+    if (confirm('¿Estás seguro de descartar todos los cambios?')) {
+      window.location.reload();
+    }
   };
 
   const getChannelName = (channelId) => {
@@ -48,18 +61,39 @@ export function XPSystemSettings({ guildId, config, channels, roles }) {
 
   return (
     <div className="space-y-6">
+      {/* Sticky Action Bar */}
+      <StickyActionBar
+        hasChanges={hasChanges}
+        saving={saving}
+        onSave={handleSaveAll}
+        onReset={handleReset}
+        saveText="Guardar Toda la Configuración"
+      />
+
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-          <Zap className="w-8 h-8 text-yellow-400" />
-          Sistema XP
-        </h1>
-        <p className="text-gray-400">
-          Configura el sistema de experiencia y progresión de tu servidor
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white flex items-center space-x-3">
+            <Zap className="w-8 h-8 text-yellow-400" />
+            <span>Sistema XP</span>
+          </h2>
+          <p className="text-gray-400 mt-1">
+            Configura el sistema de experiencia y progresión de tu servidor
+          </p>
+        </div>
       </div>
 
-      <UnsavedChangesAlert show={hasChanges} />
+      {/* Información general */}
+      <InfoAlert
+        title="Sistema de experiencia"
+        variant="blue"
+        items={[
+          'Los usuarios ganan XP por enviar mensajes (con cooldown de 60 segundos)',
+          'El multiplicador afecta la velocidad de progresión de todos los usuarios',
+          'Los canales ignorados no otorgan XP',
+          'Los roles de nivel se asignan automáticamente al alcanzar el nivel requerido'
+        ]}
+      />
 
       {/* Multiplicador de XP */}
       <XPMultiplier 
@@ -129,7 +163,7 @@ export function XPSystemSettings({ guildId, config, channels, roles }) {
         </div>
 
         <InfoAlert
-          title="¿Cómo funciona?"
+          title="¿Cómo funcionan los roles de nivel?"
           items={[
             'Los roles se asignan automáticamente cuando un usuario alcanza el nivel especificado',
             'Los usuarios mantienen todos los roles de niveles inferiores que hayan alcanzado',
@@ -148,14 +182,6 @@ export function XPSystemSettings({ guildId, config, channels, roles }) {
         <h2 className="text-2xl font-bold text-white mb-4">🎨 Banner de Rank Card</h2>
         <ImageBannerSettings guildId={guildId} type="rank-card" />
       </div>
-
-      {/* Botón de Guardar */}
-      <SaveButton 
-        onClick={handleSaveAll} 
-        saving={generalSettings.saving || notificationSettings.saving || roleSettings.saving} 
-        hasChanges={hasChanges}
-        text="Guardar Toda la Configuración"
-      />
     </div>
   );
 }

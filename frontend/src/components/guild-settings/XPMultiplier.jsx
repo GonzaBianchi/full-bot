@@ -18,16 +18,19 @@ export function XPMultiplier({ multiplier, setMultiplier }) {
           <button
             key={val}
             onClick={() => setMultiplier(val)}
-            className={`px-4 py-3 rounded-lg font-medium transition-all border-2 ${
+            className={`px-4 py-3 rounded-lg font-medium transition-all border-2 cursor-pointer ${
               multiplier === val
                 ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-gray-700/50 border-gray-600 text-gray-300 hover:border-indigo-500/50'
+                : 'bg-gray-700/50 border-gray-600 text-gray-300 hover:border-indigo-500/50 hover:bg-gray-700'
             }`}
           >
             {val}x
           </button>
         ))}
       </div>
+      <p className="text-xs text-gray-400 mt-3">
+        Multiplicador actual: <span className="text-indigo-400 font-medium">{multiplier}x</span>
+      </p>
     </SectionCard>
   );
 }
