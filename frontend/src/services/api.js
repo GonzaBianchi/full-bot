@@ -44,6 +44,13 @@ export const roleMenuService = {
   publish: (guildId, id) => api.post(`/api/guilds/${encodeURIComponent(guildId)}/role-menus/${encodeURIComponent(id)}/publish`)
 };
 
+// ========== NUEVO: Servicio de Auto-Roles ==========
+export const autoRolesService = {
+  getConfig: (guildId) => api.get(`/api/guilds/${guildId}/config/auto-roles`),
+  update: (guildId, payload) => api.post(`/api/guilds/${guildId}/config/auto-roles`, payload)
+};
+// ===================================================
+
 export const imageService = {
   getConfig: (guildId) => api.get(`/api/guilds/${guildId}/config/images`),
   updateRankCard: (guildId, payload) => api.post(`/api/guilds/${guildId}/config/images/rank-card`, payload),

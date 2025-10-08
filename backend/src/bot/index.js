@@ -9,7 +9,7 @@ import registerCommands from './commands/registerCommands.js';
 import RoleMenu from '../models/RoleMenu.js';
 import setupAchievementTracking from './events/achievementTracking.js';
 import setupMediaFilter from './events/mediaFilterHandler.js';
-import BirthdayChecker from '../services/birthdayChecker.js'; // ← IMPORTAR BIRTHDAY CHECKER
+import BirthdayChecker from '../services/birthdayChecker.js';
 
 dotenv.config();
 
@@ -22,7 +22,7 @@ class BotApp {
         GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers // ← IMPORTANTE: Ya lo tienes
       ],
       partials: [
         Partials.Channel, 
@@ -33,7 +33,7 @@ class BotApp {
     });
 
     this.api = new ApiServer(this.client);
-    this.birthdayChecker = null; // ← AGREGAR REFERENCIA AL BIRTHDAY CHECKER
+    this.birthdayChecker = null;
     this.setupEventHandlers();
   }
 
@@ -101,25 +101,58 @@ class BotApp {
         }
       };
 
-      // Registrar handlers de events
+      // ========== Registrar handlers de events ==========
       try {
         const msgHandler = (await import('./events/messageCreate.js')).default;
         this.client.on('messageCreate', msgHandler);
+        logger.info('✅ Handler de messageCreate registrado');
+      } catch (e) {
+        logger.error('❌ Error registrando messageCreate:', e);
+      }
 
+      try {
         const readyHandler = (await import('./events/ready.js')).default;
-        if (readyHandler && readyHandler.name) {
-          // ready event ya manejado
+        if (readyHandler && readyHandler.execute) {
+          await readyHandler.execute(this.client);
         }
+        logger.info('✅ Handler de ready ejecutado');
+      } catch (e) {
+        logger.error('❌ Error ejecutando ready handler:', e);
+      }
 
+      try {
         const interactionHandler = (await import('./events/interactionCreate.js')).default;
         if (interactionHandler && interactionHandler.name) {
           this.client.on(interactionHandler.name, (...args) => interactionHandler.execute(...args));
           logger.info('✅ Handler de interacciones registrado');
         }
       } catch (e) {
-        logger.warn('No se pudieron registrar algunos handlers:', e.message);
-        logger.error('Stack:', e.stack);
+        logger.error('❌ Error registrando interactionCreate:', e);
       }
+
+      // ========== NUEVO: Registrar guildMemberAdd ==========
+      try {
+        const guildMemberAddHandler = (await import('./events/guildMemberAdd.js')).default;
+        if (guildMemberAddHandler && guildMemberAddHandler.execute) {
+          this.client.on('guildMemberAdd', (member) => guildMemberAddHandler.execute(member));
+          logger.info('✅ Handler de guildMemberAdd registrado');
+        }
+      } catch (e) {
+        logger.error('❌ Error registrando guildMemberAdd:', e);
+      }
+      // =====================================================
+
+      // ========== NUEVO: Registrar guildCreate ==========
+      try {
+        const guildCreateHandler = (await import('./events/guildCreate.js')).default;
+        if (guildCreateHandler && guildCreateHandler.execute) {
+          this.client.on('guildCreate', (guild) => guildCreateHandler.execute(guild, this.client));
+          logger.info('✅ Handler de guildCreate registrado');
+        }
+      } catch (e) {
+        logger.error('❌ Error registrando guildCreate:', e);
+      }
+      // ==================================================
 
       // ========== Configurar tracking de achievements ==========
       try {
@@ -135,7 +168,6 @@ class BotApp {
       } catch (e) {
         logger.error('❌ Error configurando media filter:', e);
       }
-      // =========================================================
 
       // ========== INICIAR BIRTHDAY CHECKER ==========
       try {
@@ -145,7 +177,6 @@ class BotApp {
       } catch (e) {
         logger.error('❌ Error iniciando birthday checker:', e);
       }
-      // =============================================
 
       // Register slash commands
       try {
@@ -158,7 +189,6 @@ class BotApp {
         logger.info('✅ Slash commands registrados exitosamente');
       } catch (e) {
         logger.error('❌ Error registrando slash commands:', e.message);
-        logger.error('Stack:', e.stack);
       }
 
       // Setup reaction handlers para role menus
@@ -415,12 +445,10 @@ class BotApp {
     try {
       logger.info('Iniciando graceful shutdown...');
       
-      // ========== DETENER BIRTHDAY CHECKER ==========
       if (this.birthdayChecker) {
         logger.info('Deteniendo birthday checker...');
         this.birthdayChecker.stop();
       }
-      // =============================================
       
       if (this.client) {
         logger.info('Desconectando bot de Discord...');

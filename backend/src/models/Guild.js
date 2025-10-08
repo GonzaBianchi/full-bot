@@ -17,6 +17,17 @@ const GuildSchema = new mongoose.Schema({
     level: { type: Number, required: true },
     roleId: { type: String, required: true }
   }],
+
+  autoRoles: {
+    enabled: { type: Boolean, default: false },
+    roles: [{ type: String }],
+    restoreLevelRoles: { type: Boolean, default: true },
+    welcomeChannelId: { type: String, default: null },
+    welcomeMessage: { 
+      type: String, 
+      default: '👋 ¡Bienvenido {mention} al servidor!' 
+    }
+  },
   
   // Configuración de imágenes
   images: {

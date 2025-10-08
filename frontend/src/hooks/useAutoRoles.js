@@ -1,6 +1,6 @@
 // frontend/src/hooks/useAutoRoles.js
 import { useState, useEffect } from 'react';
-import api from '../services/api';
+import { autoRolesService } from '../services/api';
 import toast from 'react-hot-toast';
 
 export function useAutoRoles(guildId, config) {
@@ -29,8 +29,7 @@ export function useAutoRoles(guildId, config) {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      // ✅ CORREGIDO: Agregar /api al path
-      const response = await api.get(`/api/guilds/${guildId}/config/auto-roles`);
+      const response = await autoRolesService.getConfig(guildId);
       const data = response.data.autoRoles;
       setSettings(data);
       setOriginalSettings(data);
@@ -50,8 +49,7 @@ export function useAutoRoles(guildId, config) {
   const saveSettings = async () => {
     try {
       setSaving(true);
-      // ✅ CORREGIDO: Agregar /api al path
-      await api.post(`/api/guilds/${guildId}/config/auto-roles`, settings);
+      await autoRolesService.update(guildId, settings);
       setOriginalSettings(settings);
       toast.success('✅ Configuración guardada correctamente');
       return true;
