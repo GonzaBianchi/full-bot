@@ -22,7 +22,8 @@ class BotApp {
         GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildMembers // ← IMPORTANTE: Ya lo tienes
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildPresences
       ],
       partials: [
         Partials.Channel, 
