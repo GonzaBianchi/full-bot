@@ -85,7 +85,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
               className="w-full flex items-center justify-center px-4 py-3 rounded-lg transition-all hover:cursor-pointer"
             >
               <div className='flex items-center'>
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft className="w-5 h-5 text-white" />
               </div>
             </button>
           )}
