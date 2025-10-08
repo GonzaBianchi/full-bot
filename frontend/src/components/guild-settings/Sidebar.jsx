@@ -85,7 +85,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
               className="w-full flex items-center justify-center p-3 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all cursor-pointer mb-4"
               title="Volver"
             >
-              <ArrowLeft className="w-6 h-6" />
+              <ArrowLeft className="w-4 h-4" />
             </button>
           )}
 
