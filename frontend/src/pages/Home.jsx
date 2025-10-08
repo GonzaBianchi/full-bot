@@ -74,7 +74,7 @@ function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+      <div className="flex items-center justify-center py-32">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Cargando...</p>
@@ -84,7 +84,7 @@ function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div>
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10"></div>
@@ -300,11 +300,11 @@ function Home() {
         </div>
 
         {/* Divider */}
-        <div className="border-t border-gray-700/50"></div>
+        <div className="my-12 border-t border-gray-700/50"></div>
       </div>
 
       {/* Features Section with Background */}
-      <div className="relative overflow-hidden">
+      <div className="relative overflow-hidden pb-16">
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10"></div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <h2 className="text-3xl font-bold text-center text-white mb-3">Características Principales</h2>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import './App.css'
 import Navbar from './components/Navbar'
 import GuildSettings from './pages/GuildSettings'
@@ -7,6 +7,29 @@ import Leaderboard from './pages/Leaderboard'
 import Home from './pages/Home'
 import RoleMenus from './pages/RoleMenus'
 import { authService } from './services/api'
+
+// Wrapper component to handle scroll behavior
+function AppContent({ user, onLogout }) {
+  const location = useLocation();
+  
+  // Determinar si la ruta actual necesita layout con sidebar (GuildSettings)
+  const isGuildSettingsRoute = location.pathname.includes('/guild/') && !location.pathname.includes('/leaderboard');
+  
+  return (
+    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
+      <Navbar user={user} onLogout={onLogout} />
+      <div className={`flex-1 ${isGuildSettingsRoute ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<div className="p-6">Bienvenido al dashboard</div>} />
+          <Route path="/guild/:guildId" element={<GuildSettings />} />
+          <Route path="/guild/:guildId/leaderboard" element={<Leaderboard />} />
+          <Route path="/guild/:guildId/role-menus" element={<RoleMenus />} />
+        </Routes>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [user, setUser] = useState(null)
@@ -67,18 +90,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <div className="h-screen flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
-        <Navbar user={user} onLogout={onLogout} />
-        <div className="flex-1 overflow-hidden">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/dashboard" element={<div className="p-6">Bienvenido al dashboard</div>} />
-            <Route path="/guild/:guildId" element={<GuildSettings />} />
-            <Route path="/guild/:guildId/leaderboard" element={<Leaderboard />} />
-            <Route path="/guild/:guildId/role-menus" element={<RoleMenus />} />
-          </Routes>
-        </div>
-      </div>
+      <AppContent user={user} onLogout={onLogout} />
     </BrowserRouter>
   )
 }

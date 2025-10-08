@@ -75,6 +75,8 @@ function Leaderboard() {
   const changePage = (newPage) => {
     setCurrentPage(newPage);
     window.history.pushState({}, '', `?page=${newPage}`);
+    // Scroll to top cuando cambie de página
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (loading && leaderboard.length === 0) {
@@ -89,7 +91,7 @@ function Leaderboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen h-full overflow-y-auto bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -129,7 +131,7 @@ function Leaderboard() {
               <div className="flex-1">
                 <h1 className="text-3xl font-bold text-white mb-1 flex items-center gap-3">
                   🏆 Leaderboard del Servidor 
-                  {/* Guild Info (Newly Added) */}
+                  {/* Guild Info */}
                   {guildInfo && (
                     <div className="flex items-center gap-2">
                       {guildInfo.iconURL ? (
@@ -158,7 +160,6 @@ function Leaderboard() {
             </div>
           </div>
         </div>
-
 
         {/* Leaderboard Cards (Mobile-friendly) */}
         <div className="space-y-3">
@@ -250,7 +251,7 @@ function Leaderboard() {
 
         {/* Pagination */}
         {pagination && pagination.totalPages > 1 && (
-          <div className="mt-8 bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50">
+          <div className="mt-8 mb-8 bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-400">
                 Mostrando <span className="text-white font-medium">{((currentPage - 1) * (pagination.limit || 10)) + 1}</span> - <span className="text-white font-medium">{Math.min(currentPage * (pagination.limit || 10), pagination.totalUsers)}</span> de <span className="text-white font-medium">{pagination.totalUsers}</span>
