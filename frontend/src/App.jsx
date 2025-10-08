@@ -25,8 +25,13 @@ function AppContent({ user, onLogout }) {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={<div className="p-6">Bienvenido al dashboard</div>} />
-          <Route path="/guild/:guildId" element={<GuildSettings />} />
+          
+          {/* ========== RUTA PÚBLICA: Leaderboard ========== */}
           <Route path="/guild/:guildId/leaderboard" element={<Leaderboard />} />
+          {/* ================================================ */}
+          
+          {/* Rutas protegidas */}
+          <Route path="/guild/:guildId" element={<GuildSettings />} />
           <Route path="/guild/:guildId/role-menus" element={<RoleMenus />} />
         </Routes>
       </div>
@@ -76,7 +81,11 @@ function App() {
     )
   }
 
-  if (!user) {
+  // ========== IMPORTANTE: Permitir acceso sin autenticación a leaderboard ==========
+  const currentPath = window.location.pathname;
+  const isLeaderboardRoute = currentPath.includes('/leaderboard');
+  
+  if (!user && !isLeaderboardRoute) {
     const API_BASE = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com'
     const loginUrl = `${API_BASE}/api/auth/login?redirect=${encodeURIComponent('/')}`
     
@@ -90,6 +99,7 @@ function App() {
       </div>
     )
   }
+  // ================================================================================
 
   return (
     <BrowserRouter>

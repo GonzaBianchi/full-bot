@@ -22,20 +22,22 @@ function Leaderboard() {
   const loadLeaderboard = async (page) => {
     setLoading(true);
     try {
-      // Intentar con endpoint autenticado primero
+      // ========== PRIORIZAR ENDPOINT PÚBLICO ==========
       try {
-        const response = await leaderboardService.getLeaderboard(guildId, page);
-        setLeaderboard(response.data.leaderboard);
-        setPagination(response.data.pagination);
-        setIsAuthenticated(true);
-      } catch (authError) {
-        // Si falla autenticación, usar endpoint público
-        console.log('Usando endpoint público');
+        console.log('Usando endpoint público de leaderboard');
         const response = await leaderboardService.getPublic(guildId, page);
         setLeaderboard(response.data.leaderboard);
         setPagination(response.data.pagination);
         setIsAuthenticated(false);
+      } catch (publicError) {
+        // Si falla público, intentar con autenticado (fallback)
+        console.log('Endpoint público falló, intentando autenticado');
+        const response = await leaderboardService.getLeaderboard(guildId, page);
+        setLeaderboard(response.data.leaderboard);
+        setPagination(response.data.pagination);
+        setIsAuthenticated(true);
       }
+      // ===============================================
 
       // Fetch public guild info (name + icon)
       const infoRes = await guildService.getPublicInfo(guildId).catch((err) => {
