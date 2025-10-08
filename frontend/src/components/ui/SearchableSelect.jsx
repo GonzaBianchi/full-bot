@@ -101,10 +101,10 @@ export function SearchableSelect({
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-gray-800 border-2 border-indigo-500 rounded-lg shadow-2xl overflow-hidden">
-          <div className="p-2 border-b border-gray-700">
+        <div className="absolute z-[9999] w-full mt-2 bg-gray-800 border-2 border-indigo-500 rounded-lg shadow-2xl overflow-hidden max-h-[300px]">
+          <div className="p-2 border-b border-gray-700 bg-gray-800 sticky top-0 z-10">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <input
                 type="text"
                 value={search}
@@ -112,13 +112,14 @@ export function SearchableSelect({
                 placeholder="Buscar..."
                 className="w-full pl-10 pr-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 autoFocus
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
           </div>
 
-          <div className="max-h-64 overflow-y-auto">
+          <div className="max-h-64 overflow-y-auto bg-gray-800">
             {filteredOptions.length === 0 ? (
-              <div className="px-4 py-8 text-center text-gray-400 text-sm">
+              <div className="px-4 py-8 text-center text-gray-400 text-sm bg-gray-800">
                 {emptyMessage}
               </div>
             ) : (
@@ -133,7 +134,7 @@ export function SearchableSelect({
                     className={`px-4 py-3 cursor-pointer transition-colors ${
                       isSelected 
                         ? 'bg-indigo-600 text-white' 
-                        : 'hover:bg-gray-700 text-gray-300'
+                        : 'hover:bg-gray-700 text-gray-300 bg-gray-800'
                     }`}
                   >
                     {renderOption ? renderOption(option, isSelected) : (

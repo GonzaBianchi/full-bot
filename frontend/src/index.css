@@ -6,3 +6,56 @@
   --color-discord-blurple: #5865f2;
   --color-discord-red: #ed4245;
 }
+
+/* Asegurar que html y body tengan el fondo correcto y se extiendan */
+html, body {
+  min-height: 100vh;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(to bottom right, #111827, #1f2937, #111827);
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  background: transparent;
+}
+
+/* Prevenir el fondo blanco en dropdowns */
+.bg-gray-800,
+.bg-gray-700 {
+  background-color: #1f2937 !important;
+}
+
+/* Asegurar que los dropdowns tengan z-index alto */
+[class*="z-[9999]"] {
+  position: absolute;
+  z-index: 9999 !important;
+}
+
+/* Scroll suave para contenedores */
+.overflow-y-auto {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbar para mejor apariencia */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.7);
+}

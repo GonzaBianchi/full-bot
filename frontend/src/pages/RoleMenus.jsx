@@ -112,7 +112,8 @@ function RoleMenus() {
         toast.success('✅ Menú creado exitosamente');
       }
       cancelEdit();
-      load();
+      // Forzar recarga completa para obtener los datos actualizados
+      await load();
     } catch (e) { 
       console.error(e); 
       toast.error('❌ Error guardando el menú'); 

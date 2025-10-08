@@ -67,14 +67,16 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Navbar user={user} onLogout={onLogout} />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/dashboard" element={<div className="p-6">Bienvenido al dashboard</div>} />
-        <Route path="/guild/:guildId" element={<GuildSettings />} />
-        <Route path="/guild/:guildId/leaderboard" element={<Leaderboard />} />
-        <Route path="/guild/:guildId/role-menus" element={<RoleMenus />} />
-      </Routes>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+        <Navbar user={user} onLogout={onLogout} />
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<div className="p-6">Bienvenido al dashboard</div>} />
+          <Route path="/guild/:guildId" element={<GuildSettings />} />
+          <Route path="/guild/:guildId/leaderboard" element={<Leaderboard />} />
+          <Route path="/guild/:guildId/role-menus" element={<RoleMenus />} />
+        </Routes>
+      </div>
     </BrowserRouter>
   )
 }

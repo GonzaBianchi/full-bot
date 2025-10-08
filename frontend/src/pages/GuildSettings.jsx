@@ -15,7 +15,7 @@ import { AutoRolesSettings } from '../components/guild-settings/AutoRolesSetting
 import { AchievementsSettings } from '../components/guild-settings/AchievementsSettings';
 import { CustomMessages } from '../components/guild-settings/CustomMessages';
 import { MediaFilterSettings } from '../components/guild-settings/MediaFilterSettings';
-import { BirthdaySettings } from '../components/guild-settings/BirthdaySettings'; // ← NUEVO
+import { BirthdaySettings } from '../components/guild-settings/BirthdaySettings';
 import RoleMenus from './RoleMenus';
 import { guildService } from '../services/api';
 
@@ -66,7 +66,7 @@ function GuildSettings() {
     'role-menus': false,
     'custom-messages': false,
     'media-filter': false,
-    'birthdays': false, // ← NUEVO
+    'birthdays': false,
     achievements: false,
     leaderboard: false
   };
@@ -76,10 +76,10 @@ function GuildSettings() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <>
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
 
-      <div className="flex">
+      <div className="flex min-h-screen">
         <Sidebar 
           activeSection={activeSection} 
           setActiveSection={setActiveSection}
@@ -87,8 +87,8 @@ function GuildSettings() {
           guilds={guilds}
         />
 
-        <main className="flex-1 p-8">
-          <div className="max-w-4xl">
+        <main className="flex-1 p-8 overflow-y-auto">
+          <div className="max-w-4xl mx-auto">
             {activeSection === 'xp-system' && (
               <XPSystemSettings 
                 guildId={guildId} 
@@ -99,9 +99,7 @@ function GuildSettings() {
             )}
 
             {activeSection === 'role-menus' && (
-              <div>
-                <RoleMenus />
-              </div>
+              <RoleMenus />
             )}
 
             {activeSection === 'auto-roles' && (
@@ -137,7 +135,6 @@ function GuildSettings() {
               />
             )}
 
-            {/* ========== NUEVA SECCIÓN DE CUMPLEAÑOS ========== */}
             {activeSection === 'birthdays' && (
               <BirthdaySettings 
                 guildId={guildId} 
@@ -146,7 +143,6 @@ function GuildSettings() {
                 roles={roles}
               />
             )}
-            {/* ================================================= */}
 
             {activeSection === 'leaderboard' && (
               <LeaderboardSection guildId={guildId} />
@@ -154,7 +150,7 @@ function GuildSettings() {
           </div>
         </main>
       </div>
-    </div>
+    </>
   );
 }
 
