@@ -122,7 +122,7 @@ export function MediaFilterSettings({ guildId, config, channels, roles }) {
             <select
               value={targetChannelId || ''}
               onChange={(e) => setTargetChannelId(e.target.value || null)}
-              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full cursor-pointer px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">Seleccionar canal destino</option>
               {channels.map((channel) => (

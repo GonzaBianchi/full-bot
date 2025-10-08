@@ -55,7 +55,7 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
         {/* Botón Volver */}
         <button
           onClick={() => navigate('/')}
-          className="flex items-center space-x-2 text-gray-400 hover:text-white hover:border hover:border-gray-400 hover:rounded-lg mb-6 group cursor-pointer hover:scale-105 transition-all"
+          className="flex items-center space-x-2 text-gray-400 hover:text-white mb-6 group cursor-pointer hover:scale-105 transition-all"
         >
           <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           <span>Volver</span>
@@ -161,13 +161,13 @@ export function Sidebar({ activeSection, setActiveSection, hasChanges, guilds = 
               <button
                 key={item.id}
                 onClick={() => setActiveSection(item.id)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all ${
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all hover:cursor-pointer ${
                   isActive
                     ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/50'
                     : 'text-gray-400 hover:bg-gray-700/50 hover:text-white'
                 }`}
               >
-                <div className="flex items-center space-x-3 hover:cursor-pointer">
+                <div className="flex items-center space-x-3">
                   <Icon className="w-5 h-5" />
                   <span className="font-medium">{item.label}</span>
                 </div>

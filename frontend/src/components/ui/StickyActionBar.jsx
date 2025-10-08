@@ -29,7 +29,7 @@ export function StickyActionBar({
 
       {/* Botones de acción - Sticky */}
       <div className="sticky top-0 z-50 bg-gray-900/95 border-b border-gray-700/50 backdrop-blur-md shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-3">
+        <div className="max-w-7xl mx-auto px-4 py-3 backdrop-blur-md rounded-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               {hasChanges && (
