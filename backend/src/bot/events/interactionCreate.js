@@ -71,10 +71,14 @@ export default {
 
       if (!commandModule) {
         logger.warn(`Comando /${commandName} no encontrado`);
-        return await interaction.reply({
-          content: `❌ El comando /${commandName} no está disponible.`,
-          ephemeral: true
-        });
+        // No responder si ya fue respondido
+        if (!interaction.replied && !interaction.deferred) {
+          return await interaction.reply({
+            content: `❌ El comando /${commandName} no está disponible.`,
+            flags: 64 // ephemeral
+          });
+        }
+        return;
       }
 
       // Ejecutar el comando
@@ -90,10 +94,16 @@ export default {
         : '❌ Hubo un error al ejecutar este comando.';
 
       try {
-        if (interaction.deferred || interaction.replied) {
+        // Verificar si ya fue respondido
+        if (interaction.deferred) {
           await interaction.editReply({ content: errorMessage });
+        } else if (!interaction.replied) {
+          await interaction.reply({ 
+            content: errorMessage, 
+            flags: 64 // ephemeral
+          });
         } else {
-          await interaction.reply({ content: errorMessage, ephemeral: true });
+          logger.warn('La interacción ya fue respondida, no se puede enviar mensaje de error');
         }
       } catch (replyError) {
         logger.error('No se pudo responder al error:', replyError);
