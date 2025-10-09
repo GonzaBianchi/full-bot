@@ -98,12 +98,12 @@ export default {
         .setTitle('📈 Estadísticas Detalladas')
         .setDescription(
           `\`\`\`ansi\n` +
-          `[2;36m📝 Mensajes.............. ${progress.stats.totalMessages.toLocaleString()}[0m\n` +
-          `[2;35m⭐ Reacciones Recibidas.. ${progress.stats.totalReactions.toLocaleString()}[0m\n` +
-          `[2;33m👍 Reacciones Dadas...... ${progress.stats.totalReactionsGiven.toLocaleString()}[0m\n` +
-          `[2;32m🎙️ Tiempo en Voz......... ${formatVoiceTime(progress.stats.totalVoiceTime)}[0m\n` +
-          `[2;31m🚀 Nitro Boost........... ${progress.stats.hasBoosted ? 'Activo ✅' : 'Inactivo ❌'}[0m\n` +
-          `\`\`\`\n`
+          `\u001b[36m📝 Mensajes.............. ${progress.stats.totalMessages.toLocaleString()}\u001b[0m\n` +
+          `\u001b[35m⭐ Reacciones Recibidas.. ${progress.stats.totalReactions.toLocaleString()}\u001b[0m\n` +
+          `\u001b[33m👍 Reacciones Dadas...... ${progress.stats.totalReactionsGiven.toLocaleString()}\u001b[0m\n` +
+          `\u001b[32m🎙️ Tiempo en Voz......... ${formatVoiceTime(progress.stats.totalVoiceTime)}\u001b[0m\n` +
+          `\u001b[31m🚀 Nitro Boost........... ${progress.stats.hasBoosted ? 'Activo ✅' : 'Inactivo ❌'}\u001b[0m\n` +
+          `\`\`\``
         )
         .setFooter({
           text: `${progress.achievements.length} logros disponibles | Sigue participando!`,
