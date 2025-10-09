@@ -10,6 +10,7 @@ export default {
     try {
       const client = interaction.client;
       const bot = client.user;
+      const developerId = '220625834627694592';
 
       // Calcular estadísticas
       const guildCount = client.guilds.cache.size;
@@ -50,7 +51,7 @@ export default {
           {
             name: '🔗 Enlaces',
             value: `[Panel Web](${process.env.FRONTEND_URL || 'https://therifthavenfull.vercel.app'})\n` +
-                   `[Desarrollador](<@220625834627694592>)\n` +
+                   `[Desarrollador](<@${developerId}>)\n` +
                    `[Invitar Bot](https://discord.com/api/oauth2/authorize?client_id=${bot.id}&permissions=8&scope=bot%20applications.commands)`,
             inline: false
           },

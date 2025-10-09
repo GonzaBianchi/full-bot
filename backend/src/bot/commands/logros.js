@@ -20,7 +20,6 @@ export default {
       const targetUser = interaction.options.getUser('usuario') || interaction.user;
       const guildId = interaction.guild.id;
 
-      // Obtener progreso del usuario
       const progress = await achievementService.getUserProgress(targetUser.id, guildId);
 
       if (!progress || progress.achievements.length === 0) {
@@ -29,40 +28,42 @@ export default {
         });
       }
 
-      // Crear embed principal
+      // ========== DISEÑO ELEGANTE CON GRADIENTE ==========
       const mainEmbed = new EmbedBuilder()
-        .setColor(0x5865F2)
+        .setColor('#FFD700') // Dorado elegante
         .setAuthor({
-          name: `Logros de ${targetUser.username}`,
+          name: `✨ Logros de ${targetUser.username}`,
           iconURL: targetUser.displayAvatarURL({ dynamic: true })
         })
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 }))
         .setDescription(
-          `╔═══════════════════╗\n` +
-          `║  **PROGRESO TOTAL**  ║\n` +
-          `╚═══════════════════╝\n\n` +
-          `${createProgressBar(progress.summary.totalProgress, 20)} **${progress.summary.totalProgress}%**\n\n` +
-          `**Logros:** ${progress.summary.completedAchievements}/${progress.summary.totalAchievements} completados\n` +
-          `**Tiers:** ${progress.summary.completedTiers}/${progress.summary.totalTiers} desbloqueados`
+          `╭─────────────────────────╮\n` +
+          `│   **🏆 PROGRESO GLOBAL**    │\n` +
+          `╰─────────────────────────╯\n\n` +
+          `${createModernProgressBar(progress.summary.totalProgress, 20)} **${progress.summary.totalProgress}%**\n\n` +
+          `┌─ 📊 **Resumen**\n` +
+          `├─ ✅ Logros: **${progress.summary.completedAchievements}**/${progress.summary.totalAchievements}\n` +
+          `└─ 🎯 Tiers: **${progress.summary.completedTiers}**/${progress.summary.totalTiers}`
         );
 
-      // Agrupar logros por estado
       const completed = progress.achievements.filter(a => a.completed);
       const inProgress = progress.achievements.filter(a => !a.completed);
 
-      // Agregar logros en progreso
+      // Logros en progreso con estilo mejorado
       if (inProgress.length > 0) {
         let progressText = '';
         
-        for (const ach of inProgress.slice(0, 5)) {
+        for (const ach of inProgress.slice(0, 4)) {
           const icon = ach.achievement.icon || '🏆';
-          const progressBar = createProgressBar(ach.progress, 10);
+          const progressBar = createModernProgressBar(ach.progress, 12);
           
-          progressText += `\n${icon} **${ach.achievement.name}**\n`;
-          progressText += `${progressBar} ${ach.progress}%\n`;
+          progressText += `\n**${icon} ${ach.achievement.name}**\n`;
+          progressText += `${progressBar} \`${ach.progress}%\`\n`;
           
           if (ach.nextTier) {
-            progressText += `└ Siguiente: *${ach.nextTier.title}* (${formatValue(ach.nextTier.target, ach.achievement.type)})\n`;
+            const remaining = ach.nextTier.target - ach.currentValue;
+            progressText += `└─ Siguiente: **${ach.nextTier.title}** ${ach.nextTier.emoji || ''}\n`;
+            progressText += `   Faltan: \`${formatValue(remaining, ach.achievement.type)}\`\n`;
           }
         }
 
@@ -73,7 +74,7 @@ export default {
         });
       }
 
-      // Agregar logros completados
+      // Logros completados con badges
       if (completed.length > 0) {
         let completedText = '';
         
@@ -81,11 +82,11 @@ export default {
           const icon = ach.achievement.icon || '🏆';
           const maxTier = ach.currentTier;
           
-          completedText += `${icon} **${ach.achievement.name}** - ${maxTier?.emoji || '✅'} *${maxTier?.title || 'Completado'}*\n`;
+          completedText += `${icon} **${ach.achievement.name}** ${maxTier?.emoji || '✨'} \`${maxTier?.title || 'MAX'}\`\n`;
         }
 
         if (completed.length > 5) {
-          completedText += `\n*... y ${completed.length - 5} más*`;
+          completedText += `\n💫 *... y ${completed.length - 5} logros más*`;
         }
 
         mainEmbed.addFields({
@@ -95,31 +96,33 @@ export default {
         });
       }
 
-      // Estadísticas
-      mainEmbed.addFields({
-        name: '📊 Estadísticas',
-        value: 
-          `📝 **Mensajes:** ${progress.stats.totalMessages.toLocaleString()}\n` +
-          `⭐ **Reacciones Recibidas:** ${progress.stats.totalReactions.toLocaleString()}\n` +
-          `👍 **Reacciones Dadas:** ${progress.stats.totalReactionsGiven.toLocaleString()}\n` +
-          `🎙️ **Tiempo en Voz:** ${formatVoiceTime(progress.stats.totalVoiceTime)}\n` +
-          `🚀 **Nitro Boost:** ${progress.stats.hasBoosted ? 'Sí ✅' : 'No ❌'}`,
-        inline: false
-      });
+      // Estadísticas con iconos mejorados
+      const statsEmbed = new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle('📈 Estadísticas Detalladas')
+        .setDescription(
+          `\`\`\`ansi\n` +
+          `[2;36m📝 Mensajes.............. ${progress.stats.totalMessages.toLocaleString()}[0m\n` +
+          `[2;35m⭐ Reacciones Recibidas.. ${progress.stats.totalReactions.toLocaleString()}[0m\n` +
+          `[2;33m👍 Reacciones Dadas...... ${progress.stats.totalReactionsGiven.toLocaleString()}[0m\n` +
+          `[2;32m🎙️ Tiempo en Voz......... ${formatVoiceTime(progress.stats.totalVoiceTime)}[0m\n` +
+          `[2;31m🚀 Nitro Boost........... ${progress.stats.hasBoosted ? 'Activo ✅' : 'Inactivo ❌'}[0m\n` +
+          `\`\`\`\n`
+        )
+        .setFooter({
+          text: `${progress.achievements.length} logros disponibles | Sigue participando!`,
+          iconURL: interaction.guild.iconURL({ dynamic: true })
+        })
+        .setTimestamp();
 
-      mainEmbed.setFooter({
-        text: `${progress.achievements.length} logros disponibles • Sigue participando para desbloquear más!`
-      });
-      mainEmbed.setTimestamp();
-
-      await interaction.editReply({ embeds: [mainEmbed] });
+      await interaction.editReply({ embeds: [mainEmbed, statsEmbed] });
 
     } catch (error) {
       logger.error('Error en comando /logros:', error);
       
       const errorMessage = interaction.deferred 
-        ? { content: 'Error al obtener los logros. Intenta de nuevo más tarde.' }
-        : { content: 'Error al obtener los logros.', ephemeral: true };
+        ? { content: '❌ Error al obtener los logros. Intenta de nuevo más tarde.' }
+        : { content: '❌ Error al obtener los logros.', ephemeral: true };
 
       if (interaction.deferred) {
         await interaction.editReply(errorMessage);
@@ -131,17 +134,17 @@ export default {
 };
 
 /**
- * Crea una barra de progreso visual con caracteres Unicode
+ * Barra de progreso moderna con degradado visual
  */
-function createProgressBar(percent, length = 10) {
+function createModernProgressBar(percent, length = 12) {
   const filled = Math.floor((percent / 100) * length);
   const empty = length - filled;
   
-  // Usar caracteres más visuales
-  const filledChar = '█';
-  const emptyChar = '░';
+  // Usar caracteres más modernos
+  const start = '▰';
+  const end = '▱';
   
-  return `${filledChar.repeat(filled)}${emptyChar.repeat(empty)}`;
+  return `${start.repeat(filled)}${end.repeat(empty)}`;
 }
 
 /**
