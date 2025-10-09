@@ -71,7 +71,10 @@ export default {
         })
         .setTimestamp();
 
-      await interaction.reply({ embeds: [embed] });
+      await interaction.reply({ 
+        embeds: [embed],
+        allowedMentions: { parse: ['users'] }
+      });
       logger.info(`Comando botinfo ejecutado por ${interaction.user.tag}`);
     } catch (error) {
       logger.error('Error en comando botinfo:', error);

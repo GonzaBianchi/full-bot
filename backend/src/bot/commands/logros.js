@@ -38,7 +38,7 @@ export default {
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 }))
         .setDescription(
           `╭─────────────────────────╮\n` +
-          `│   **🏆 PROGRESO GLOBAL**    │\n` +
+          `    **🏆 PROGRESO GLOBAL**    \n` +
           `╰─────────────────────────╯\n\n` +
           `${createModernProgressBar(progress.summary.totalProgress, 20)} **${progress.summary.totalProgress}%**\n\n` +
           `┌─ 📊 **Resumen**\n` +
@@ -49,11 +49,11 @@ export default {
       const completed = progress.achievements.filter(a => a.completed);
       const inProgress = progress.achievements.filter(a => !a.completed);
 
-      // Logros en progreso con estilo mejorado
+      // Logros en progreso - MOSTRAR TODOS
       if (inProgress.length > 0) {
         let progressText = '';
         
-        for (const ach of inProgress.slice(0, 4)) {
+        for (const ach of inProgress) {
           const icon = ach.achievement.icon || '🏆';
           const progressBar = createModernProgressBar(ach.progress, 12);
           
@@ -68,30 +68,26 @@ export default {
         }
 
         mainEmbed.addFields({
-          name: '⏳ En Progreso',
+          name: `⏳ En Progreso (${inProgress.length})`,
           value: progressText || 'Ninguno',
           inline: false
         });
       }
 
-      // Logros completados con badges
+      // Logros completados - MOSTRAR TODOS
       if (completed.length > 0) {
         let completedText = '';
         
-        for (const ach of completed.slice(0, 5)) {
+        for (const ach of completed) {
           const icon = ach.achievement.icon || '🏆';
           const maxTier = ach.currentTier;
           
           completedText += `${icon} **${ach.achievement.name}** ${maxTier?.emoji || '✨'} \`${maxTier?.title || 'MAX'}\`\n`;
         }
 
-        if (completed.length > 5) {
-          completedText += `\n💫 *... y ${completed.length - 5} logros más*`;
-        }
-
         mainEmbed.addFields({
-          name: '✅ Completados',
-          value: completedText,
+          name: `✅ Completados (${completed.length})`,
+          value: completedText || 'Ninguno',
           inline: false
         });
       }
