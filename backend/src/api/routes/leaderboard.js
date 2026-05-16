@@ -12,6 +12,13 @@ const router = express.Router();
 const publicCache = new Map();
 const CACHE_TTL_MS = 30 * 1000; // 30 segundos
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of publicCache.entries()) {
+    if (now - entry.ts > CACHE_TTL_MS) publicCache.delete(key);
+  }
+}, CACHE_TTL_MS);
+
 const validatePagination = [
   query('page').optional().isInt({ min: 1 }).toInt(),
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
@@ -50,28 +57,31 @@ router.get('/:guildId', isAuthenticated, validatePagination, async (req, res) =>
 
     const total = await User.countDocuments({ guildId });
 
-    const enrichedUsers = await Promise.all(
-      users.map(async (user, index) => {
-        try {
-          const discordUser = req.discordClient ? await req.discordClient.users.fetch(user.userId).catch(() => null) : null;
-          return {
-            ...user.toObject(),
-            rank: skip + index + 1,
-            username: discordUser ? discordUser.username : user.username || null,
-            discriminator: discordUser ? discordUser.discriminator : user.discriminator || null,
-            avatar: discordUser ? discordUser.displayAvatarURL({ dynamic: true, size: 128 }) : user.avatar || null,
-            progress: typeof user.getXpProgress === 'function' ? user.getXpProgress() : undefined,
-          };
-        } catch (err) {
-          logger.warn('Discord user fetch failed for', user.userId, err.message);
-          return {
-            ...user.toObject(),
-            rank: skip + index + 1,
-            progress: typeof user.getXpProgress === 'function' ? user.getXpProgress() : undefined,
-          };
+    const usersNeedingFetch = users.filter(u => !u.username);
+    const discordFetched = new Map();
+    if (req.discordClient && usersNeedingFetch.length > 0) {
+      await Promise.all(usersNeedingFetch.map(async u => {
+        const discordUser = await req.discordClient.users.fetch(u.userId).catch(() => null);
+        if (discordUser) {
+          discordFetched.set(u.userId, discordUser);
+          User.updateDiscordInfo(u.guildId, u.userId, discordUser).catch(err =>
+            logger.warn('Error cacheando info de Discord:', err.message)
+          );
         }
-      })
-    );
+      }));
+    }
+
+    const enrichedUsers = users.map((user, index) => {
+      const discordUser = discordFetched.get(user.userId);
+      return {
+        ...user.toObject(),
+        rank: skip + index + 1,
+        username: discordUser ? discordUser.username : user.username || null,
+        discriminator: discordUser ? discordUser.discriminator : user.discriminator || null,
+        avatar: discordUser ? discordUser.displayAvatarURL({ dynamic: true, size: 128 }) : user.avatar || null,
+        progress: typeof user.getXpProgress === 'function' ? user.getXpProgress() : undefined,
+      };
+    });
 
     res.json({
       leaderboard: enrichedUsers,
@@ -115,56 +125,44 @@ router.get('/public/:guildId', publicLimiter, validatePagination, async (req, re
 
     const total = await User.countDocuments({ guildId });
 
-    // ========== ENRIQUECER CON DATOS DE DISCORD ==========
-    const enriched = await Promise.all(users.map(async (u, idx) => {
+    const usersNeedingFetch = users.filter(u => !u.username);
+    const discordFetched = new Map();
+    if (req.discordClient && usersNeedingFetch.length > 0) {
+      await Promise.all(usersNeedingFetch.map(async u => {
+        const discordUser = await req.discordClient.users.fetch(u.userId).catch(() => null);
+        if (discordUser) {
+          discordFetched.set(u.userId, discordUser);
+          User.updateDiscordInfo(u.guildId, u.userId, discordUser).catch(err =>
+            logger.warn('Error actualizando info de Discord en BD:', err.message)
+          );
+        }
+      }));
+    }
+
+    const enriched = users.map((u, idx) => {
       const rank = skip + idx + 1;
       const currentLevelTotal = (typeof u.level === 'number') ? xpForLevel(u.level) : 0;
       const nextLevelTotal = (typeof u.level === 'number') ? xpForLevel(u.level + 1) : 0;
       const xpIntoLevel = Math.max(0, u.totalXp - currentLevelTotal);
       const xpForNext = Math.max(0, nextLevelTotal - currentLevelTotal);
 
-      // ========== INTENTAR FETCH DE DISCORD ==========
-      let username = u.username || null;
-      let discriminator = u.discriminator || null;
-      let avatar = u.avatar || null;
-
-      if (req.discordClient) {
-        try {
-          const discordUser = await req.discordClient.users.fetch(u.userId).catch(() => null);
-          if (discordUser) {
-            username = discordUser.username;
-            discriminator = discordUser.discriminator;
-            avatar = discordUser.displayAvatarURL({ dynamic: true, size: 128 });
-
-            // ========== BONUS: Actualizar en BD para futuros requests ==========
-            User.updateDiscordInfo(u.guildId, u.userId, discordUser).catch(err => {
-              logger.warn('Error actualizando info de Discord en BD:', err.message);
-            });
-            // ==================================================================
-          }
-        } catch (fetchError) {
-          logger.warn(`No se pudo obtener usuario ${u.userId} de Discord:`, fetchError.message);
-        }
-      }
-      // ===============================================
-
+      const discordUser = discordFetched.get(u.userId);
       return {
         userId: u.userId,
         level: u.level,
         totalXp: u.totalXp,
         messageCount: u.messageCount,
         rank,
-        username,
-        discriminator,
-        avatar,
+        username: discordUser ? discordUser.username : u.username || null,
+        discriminator: discordUser ? discordUser.discriminator : u.discriminator || null,
+        avatar: discordUser ? discordUser.displayAvatarURL({ dynamic: true, size: 128 }) : u.avatar || null,
         progress: {
           xp: xpIntoLevel,
           xpForNextLevel: xpForNext,
           percent: xpForNext > 0 ? Math.floor((xpIntoLevel / xpForNext) * 100) : 100
         }
       };
-    }));
-    // ====================================================
+    });
 
     const payload = {
       leaderboard: enriched,
@@ -214,29 +212,26 @@ router.get('/global/top', isAuthenticated, [
       { $limit: limit }
     ]);
 
-    const enriched = await Promise.all(topUsers.map(async (u) => {
-      try {
-        const discordUser = req.discordClient ? await req.discordClient.users.fetch(u._id).catch(() => null) : null;
-        return {
-          userId: u._id,
-          totalXp: u.totalXp,
-          totalMessages: u.totalMessages,
-          servers: u.servers,
-          username: discordUser ? discordUser.username : u.username,
-          avatar: discordUser ? discordUser.displayAvatarURL({ dynamic: true, size: 128 }) : u.avatar,
-        };
-      } catch (e) {
-        logger.warn('Failed to enrich global top user', u._id, e.message);
-        return {
-          userId: u._id,
-          totalXp: u.totalXp,
-          totalMessages: u.totalMessages,
-          servers: u.servers,
-          username: u.username,
-          avatar: u.avatar,
-        };
-      }
-    }));
+    const usersNeedingFetch = topUsers.filter(u => !u.username);
+    const discordFetched = new Map();
+    if (req.discordClient && usersNeedingFetch.length > 0) {
+      await Promise.all(usersNeedingFetch.map(async u => {
+        const discordUser = await req.discordClient.users.fetch(u._id).catch(() => null);
+        if (discordUser) discordFetched.set(u._id, discordUser);
+      }));
+    }
+
+    const enriched = topUsers.map(u => {
+      const discordUser = discordFetched.get(u._id);
+      return {
+        userId: u._id,
+        totalXp: u.totalXp,
+        totalMessages: u.totalMessages,
+        servers: u.servers,
+        username: discordUser ? discordUser.username : u.username || null,
+        avatar: discordUser ? discordUser.displayAvatarURL({ dynamic: true, size: 128 }) : u.avatar || null,
+      };
+    });
 
     res.json({ top: enriched });
   } catch (error) {
@@ -259,9 +254,10 @@ router.get('/:guildId/search', isAuthenticated, [
     const { guildId } = req.params;
     const { query: q } = req.query;
 
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const users = await User.find({
       guildId,
-      username: { $regex: q, $options: 'i' }
+      username: { $regex: escaped, $options: 'i' }
     })
       .sort({ totalXp: -1 })
       .limit(20);

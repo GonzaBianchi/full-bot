@@ -74,8 +74,13 @@ class ApiServer {
       maxAge: 24 * 60 * 60 * 1000 // 24 horas
     };
 
+    const secret = process.env.SESSION_SECRET;
+    if (!secret || secret.length < 32) {
+      throw new Error('SESSION_SECRET no configurado o demasiado corto (mínimo 32 caracteres)');
+    }
+
     const sessionOptions = {
-      secret: process.env.SESSION_SECRET,
+      secret,
       resave: false,
       saveUninitialized: false,
       cookie: sessionCookie

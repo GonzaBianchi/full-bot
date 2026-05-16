@@ -1,7 +1,10 @@
 // frontend/src/components/guild-settings/LevelRolesList.jsx
-import { Award, Shield, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Shield, Trash2, Check, X } from 'lucide-react';
 
 export function LevelRolesList({ levelRoles, onRemove, getRoleName }) {
+  const [confirmingLevel, setConfirmingLevel] = useState(null);
+
   if (levelRoles.length === 0) {
     return (
       <div className="text-center py-12 bg-gray-700/30 rounded-lg border-2 border-dashed border-gray-600">
@@ -22,7 +25,6 @@ export function LevelRolesList({ levelRoles, onRemove, getRoleName }) {
           className="flex items-center justify-between bg-gray-700/50 px-4 py-4 rounded-lg border-2 border-gray-600 hover:border-indigo-500/50 transition-all group"
         >
           <div className="flex items-center space-x-4">
-            {/* Nivel Badge */}
             <div className="bg-indigo-500/20 px-4 py-2 rounded-lg border border-indigo-500/50">
               <div className="text-center">
                 <p className="text-xs text-gray-400 font-medium">Nivel</p>
@@ -30,12 +32,10 @@ export function LevelRolesList({ levelRoles, onRemove, getRoleName }) {
               </div>
             </div>
 
-            {/* Arrow */}
             <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
 
-            {/* Rol Badge */}
             <div className="flex items-center space-x-3">
               <Shield className="w-5 h-5 text-gray-400" />
               <div>
@@ -45,13 +45,30 @@ export function LevelRolesList({ levelRoles, onRemove, getRoleName }) {
             </div>
           </div>
 
-          {/* Delete Button */}
-          <button
-            onClick={() => onRemove(lr.level)}
-            className="p-2 hover:bg-red-500/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-          >
-            <Trash2 className="w-5 h-5 text-red-400" />
-          </button>
+          {confirmingLevel === lr.level ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">¿Eliminar?</span>
+              <button
+                onClick={() => { onRemove(lr.level); setConfirmingLevel(null); }}
+                className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+              >
+                <Check className="w-4 h-4 text-red-400" />
+              </button>
+              <button
+                onClick={() => setConfirmingLevel(null)}
+                className="p-2 hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmingLevel(lr.level)}
+              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <Trash2 className="w-5 h-5 text-red-400" />
+            </button>
+          )}
         </div>
       ))}
     </div>

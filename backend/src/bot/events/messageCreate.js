@@ -27,6 +27,7 @@ export default async function onMessageCreate(message) {
     if (now - last < 60 * 1000) return; // aún en cooldown
 
     cooldowns.set(key, now);
+    setTimeout(() => cooldowns.delete(key), 60 * 1000);
 
     // Calcular XP base usando fórmula MEE6 (xpPerMessage default 15-25)
     const baseXp = xpPerMessage();

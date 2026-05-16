@@ -31,12 +31,12 @@ export function xpForLevel(level) {
 export function levelFromXp(totalXp) {
   if (totalXp <= 0) return 0;
   let level = 0;
-  while (true) {
-    const nextLevel = level + 1;
-    if (xpForLevel(nextLevel) <= totalXp) {
-      level = nextLevel;
-      // safety to avoid infinite loop in case of unexpected values
-      if (level > 10000) break;
+  let accumulated = 0;
+  while (level < 10000) {
+    const next = xpNeededForLevel(level + 1);
+    if (accumulated + next <= totalXp) {
+      accumulated += next;
+      level++;
     } else {
       break;
     }

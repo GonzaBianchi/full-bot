@@ -9,6 +9,9 @@ const UserSchema = new mongoose.Schema({
   totalXp: { type: Number, default: 0 },
   messageCount: { type: Number, default: 0 },
   lastMessageAt: { type: Date, default: null },
+  username: { type: String, default: null },
+  discriminator: { type: String, default: null },
+  avatar: { type: String, default: null },
   
   // ========== NUEVO: Cumpleaños ==========
   birthday: {
@@ -66,22 +69,27 @@ UserSchema.statics.addXp = async function(guildId, userId, amount) {
 UserSchema.statics.setBirthday = async function(userId, day, month, timezone) {
   const User = this;
   
-  // Validar fecha
   if (day < 1 || day > 31 || month < 1 || month > 12) {
     throw new Error('Fecha de cumpleaños inválida');
   }
-  
-  // Validar días por mes (simple)
+
+  // Validar días por mes usando un año bisiesto de referencia para permitir el 29/02
   const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   if (day > daysInMonth[month - 1]) {
     throw new Error(`El mes ${month} no tiene ${day} días`);
   }
-  
-  // Actualizar cumpleaños para TODAS las entradas de este usuario (en todos los guilds)
+
+  // Validar timezone IANA
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: timezone });
+  } catch {
+    throw new Error(`Timezone inválida: ${timezone}`);
+  }
+
   const result = await User.updateMany(
     { userId },
-    { 
-      $set: { 
+    {
+      $set: {
         'birthday.day': day,
         'birthday.month': month,
         'birthday.timezone': timezone
@@ -137,6 +145,17 @@ UserSchema.statics.getUpcomingBirthdays = async function(guildId, limit = 10) {
   return usersWithDays.slice(0, limit);
 };
 // ===========================================================
+
+UserSchema.statics.updateDiscordInfo = async function(guildId, userId, discordUser) {
+  await this.updateOne(
+    { guildId, userId },
+    { $set: {
+      username: discordUser.username,
+      discriminator: discordUser.discriminator,
+      avatar: discordUser.displayAvatarURL({ dynamic: true, size: 128 })
+    }}
+  );
+};
 
 UserSchema.index({ guildId: 1, userId: 1 }, { unique: true });
 UserSchema.index({ guildId: 1, totalXp: -1 });
