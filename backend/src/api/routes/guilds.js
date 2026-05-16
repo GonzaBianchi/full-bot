@@ -8,6 +8,7 @@ import roleMenusRoutes from './roleMenus.js';
 import autoRolesRoutes from './autoRoles.js';
 import achievementsRoutes from './achievements.js';
 import mediaFilterRoutes from './mediaFilter.js';
+import { invalidateGuildConfig } from '../../utils/guildConfigCache.js';
 
 const router = express.Router();
 
@@ -46,6 +47,7 @@ router.post('/:guildId/config/xp-multiplier', isAuthenticated, hasGuildPermissio
     const { guildId } = req.params;
     const { multiplier } = req.body;
     let cfg = await GuildModel.findOneAndUpdate({ guildId }, { xpMultiplier: multiplier }, { new: true, upsert: true });
+    invalidateGuildConfig(guildId);
     res.json({ config: cfg });
   } catch (e) {
     logger.error('Error al actualizar multiplier:', e);
@@ -67,6 +69,7 @@ router.post('/:guildId/config/ignored-channels', isAuthenticated, hasGuildPermis
     const { guildId } = req.params;
     const { channels } = req.body;
     let cfg = await GuildModel.findOneAndUpdate({ guildId }, { ignoredChannels: channels }, { new: true, upsert: true });
+    invalidateGuildConfig(guildId);
     res.json({ config: cfg });
   } catch (e) {
     logger.error('Error al actualizar ignored channels:', e);
@@ -111,6 +114,7 @@ router.post('/:guildId/config/levelup', isAuthenticated, hasGuildPermission, [
     if (typeof message !== 'undefined') update.levelUpMessage = message;
 
     const cfg = await GuildModel.findOneAndUpdate({ guildId }, update, { new: true, upsert: true });
+    invalidateGuildConfig(guildId);
     logger.info(`✅ Configuración de levelup actualizada para guild ${guildId}`);
     res.json({ config: cfg });
   } catch (e) {
@@ -119,12 +123,13 @@ router.post('/:guildId/config/levelup', isAuthenticated, hasGuildPermission, [
   }
 });
 
-// Nueva ruta: actualizar level roles (array de objetos {level, roleId})
+// Nueva ruta: actualizar level roles (array de objetos {level, roleId}) + stackRoles
 router.post('/:guildId/config/level-roles', isAuthenticated, hasGuildPermission, [
   param('guildId').exists(),
   body('roles').isArray(),
   body('roles.*.level').isInt({ min: 1 }),
   body('roles.*.roleId').isString().isLength({ min: 1 }),
+  body('stackRoles').optional().isBoolean(),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -133,8 +138,11 @@ router.post('/:guildId/config/level-roles', isAuthenticated, hasGuildPermission,
 ], async (req, res) => {
   try {
     const { guildId } = req.params;
-    const { roles } = req.body;
-    const cfg = await GuildModel.findOneAndUpdate({ guildId }, { levelRoles: roles }, { new: true, upsert: true });
+    const { roles, stackRoles } = req.body;
+    const update = { levelRoles: roles };
+    if (typeof stackRoles === 'boolean') update.stackRoles = stackRoles;
+    const cfg = await GuildModel.findOneAndUpdate({ guildId }, update, { new: true, upsert: true });
+    invalidateGuildConfig(guildId);
     res.json({ config: cfg });
   } catch (e) {
     logger.error('Error al actualizar level roles:', e);

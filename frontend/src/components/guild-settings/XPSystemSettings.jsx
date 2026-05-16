@@ -160,6 +160,26 @@ export function XPSystemSettings({ guildId, config, channels, roles }) {
             onRemove={roleSettings.removeLevelRole}
             getRoleName={getRoleName}
           />
+
+          <div className="mt-4 pt-4 border-t border-gray-700 flex items-center justify-between">
+            <div>
+              <p className="text-white font-medium text-sm">Apilar roles</p>
+              <p className="text-gray-400 text-xs mt-0.5">
+                Activado: el usuario conserva todos los roles de niveles anteriores.<br/>
+                Desactivado: solo mantiene el rol del nivel más alto alcanzado.
+              </p>
+            </div>
+            <button
+              onClick={() => roleSettings.setStackRoles(!roleSettings.stackRoles)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                roleSettings.stackRoles ? 'bg-indigo-500' : 'bg-gray-600'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                roleSettings.stackRoles ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
         </div>
 
         <InfoAlert

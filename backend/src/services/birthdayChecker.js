@@ -67,20 +67,16 @@ class BirthdayChecker {
   /**
    * Obtiene la fecha actual en una timezone específica
    */
-  getDateInTimezone(timezone) {
+  getDateInTimezone(timezone, date = new Date()) {
     try {
-      const now = new Date();
-      const options = {
+      const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: timezone,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
-      };
-      
-      const formatter = new Intl.DateTimeFormat('en-US', options);
-      const dateString = formatter.format(now);
+      });
+      const dateString = formatter.format(date);
       const [month, day, year] = dateString.split('/').map(Number);
-      
       return { day, month, year };
     } catch (error) {
       logger.warn(`Error obteniendo fecha en timezone: ${timezone}`, error);
@@ -88,20 +84,12 @@ class BirthdayChecker {
     }
   }
 
-  /**
-   * Verifica si ya se celebró el cumpleaños hoy
-   */
-  wasAlreadyCelebratedToday(lastCelebrated) {
+  wasAlreadyCelebratedToday(lastCelebrated, timezone) {
     if (!lastCelebrated) return false;
-    
-    const now = new Date();
-    const lastCelebratedDate = new Date(lastCelebrated);
-    
-    return (
-      lastCelebratedDate.getDate() === now.getDate() &&
-      lastCelebratedDate.getMonth() === now.getMonth() &&
-      lastCelebratedDate.getFullYear() === now.getFullYear()
-    );
+    const today = this.getDateInTimezone(timezone);
+    const last = this.getDateInTimezone(timezone, new Date(lastCelebrated));
+    if (!today || !last) return false;
+    return today.day === last.day && today.month === last.month && today.year === last.year;
   }
 
   /**
@@ -166,7 +154,7 @@ class BirthdayChecker {
         if (!isToday) continue;
 
         // Verificar si ya se celebró hoy (evitar duplicados)
-        if (this.wasAlreadyCelebratedToday(birthday.lastCelebrated)) {
+        if (this.wasAlreadyCelebratedToday(birthday.lastCelebrated, timezone)) {
           logger.info(`Cumpleaños de ${userId} ya fue celebrado hoy`);
           continue;
         }

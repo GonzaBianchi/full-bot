@@ -1,7 +1,7 @@
 // backend/src/bot/events/mediaFilterHandler.js
-import GuildModel from '../../models/Guild.js';
 import logger from '../../utils/logger.js';
 import { EmbedBuilder } from 'discord.js';
+import { getGuildConfig } from '../../utils/guildConfigCache.js';
 
 /**
  * Verifica si un mensaje contiene multimedia
@@ -65,8 +65,7 @@ export async function setupMediaFilter(client) {
       
       const guildId = message.guild.id;
       
-      // Obtener configuración del guild
-      const guildConfig = await GuildModel.findOne({ guildId }).lean();
+      const guildConfig = await getGuildConfig(guildId);
       if (!guildConfig || !guildConfig.mediaFilter?.enabled) return;
       
       const { mediaFilter } = guildConfig;

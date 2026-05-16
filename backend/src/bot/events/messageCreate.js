@@ -1,8 +1,8 @@
-import Guild from '../../models/Guild.js';
 import User from '../../models/User.js';
 import { xpPerMessage } from '../utils/levelSystem.js';
 import logger from '../../utils/logger.js';
 import { updateMemberRoles } from '../../utils/roleManager.js';
+import { getGuildConfig } from '../../utils/guildConfigCache.js';
 
 // cooldown simple en memoria por guild+user (ms)
 const cooldowns = new Map(); // key: `${guildId}:${userId}` -> timestamp of last xp grant
@@ -14,8 +14,7 @@ export default async function onMessageCreate(message) {
     const guildId = message.guild.id;
     const userId = message.author.id;
 
-    // Obtener config de guild
-    const guildConfig = await Guild.findOne({ guildId }) || { xpMultiplier: 1, ignoredChannels: [], levelUpEnabled: true };
+    const guildConfig = await getGuildConfig(guildId);
 
     if (guildConfig.ignoredChannels && guildConfig.ignoredChannels.includes(message.channel.id)) return;
 
@@ -35,6 +34,9 @@ export default async function onMessageCreate(message) {
     const xpToAdd = Math.max(1, Math.floor(baseXp * multiplier));
 
     const { user, leveledUp, oldLevel, newLevel } = await User.addXp(guildId, userId, xpToAdd);
+
+    // Refrescar datos de Discord en BD en background (nombres/avatares actualizados)
+    User.updateDiscordInfo(guildId, userId, message.author).catch(() => {});
 
     logger.info(`XP otorgada: ${xpToAdd} a ${userId} en guild ${guildId} (Lv ${oldLevel} -> ${newLevel})`);
 

@@ -13,23 +13,22 @@ router.get('/login', (req, res, next) => {
   return passport.authenticate('discord')(req, res, next);
 });
 
+const ALLOWED_REDIRECT_PREFIXES = ['/dashboard', '/leaderboard', '/role-menus', '/guild/'];
+
 // Callback de Discord OAuth
-router.get('/callback', 
-  passport.authenticate('discord', { 
-    failureRedirect: process.env.FRONTEND_URL 
+router.get('/callback',
+  passport.authenticate('discord', {
+    failureRedirect: process.env.FRONTEND_URL
   }),
   (req, res) => {
-    // Si Discord devolvió state con redirect relativo, redireccionar allí
     const state = req.query && req.query.state;
     let redirectTo = `${process.env.FRONTEND_URL}/dashboard`;
-    try {
-      if (state && typeof state === 'string' && state.startsWith('/')) {
+    if (state && typeof state === 'string' && state.startsWith('/')) {
+      const path = state.split('?')[0];
+      if (ALLOWED_REDIRECT_PREFIXES.some(prefix => path === prefix || path.startsWith(prefix))) {
         redirectTo = `${process.env.FRONTEND_URL.replace(/\/$/, '')}${state}`;
       }
-    } catch (e) {
-      // ignore and use default
     }
-
     res.redirect(redirectTo);
   }
 );

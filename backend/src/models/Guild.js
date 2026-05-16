@@ -17,6 +17,7 @@ const GuildSchema = new mongoose.Schema({
     level: { type: Number, required: true },
     roleId: { type: String, required: true }
   }],
+  stackRoles: { type: Boolean, default: false },
 
   autoRoles: {
     enabled: { type: Boolean, default: false },

@@ -7,11 +7,13 @@ import { useUnsavedChanges } from './useUnsavedChanges';
 export function useRoleSettings(guildId, config) {
   // Estados actuales
   const [levelRoles, setLevelRoles] = useState([]);
+  const [stackRoles, setStackRoles] = useState(false);
   const [selectedRoleForLevel, setSelectedRoleForLevel] = useState('');
   const [selectedLevelForRole, setSelectedLevelForRole] = useState('1');
-  
+
   // Estados originales
   const [originalLevelRoles, setOriginalLevelRoles] = useState([]);
+  const [originalStackRoles, setOriginalStackRoles] = useState(false);
   
   const [saving, setSaving] = useState(false);
 
@@ -21,11 +23,14 @@ export function useRoleSettings(guildId, config) {
       const roles = config.levelRoles || [];
       setLevelRoles(roles);
       setOriginalLevelRoles([...roles]);
+      setStackRoles(config.stackRoles ?? false);
+      setOriginalStackRoles(config.stackRoles ?? false);
     }
   }, [config]);
 
   // Detectar cambios
-  const hasChanges = useUnsavedChanges(levelRoles, originalLevelRoles);
+  const rolesChanged = useUnsavedChanges(levelRoles, originalLevelRoles);
+  const hasChanges = rolesChanged || stackRoles !== originalStackRoles;
 
   // Verificar si un rol ya está siendo usado
   const isRoleUsed = (roleId) => {
@@ -67,9 +72,10 @@ export function useRoleSettings(guildId, config) {
   const save = async () => {
     setSaving(true);
     try {
-      await guildService.updateLevelRoles(guildId, levelRoles);
-      
+      await guildService.updateLevelRoles(guildId, levelRoles, stackRoles);
+
       setOriginalLevelRoles([...levelRoles]);
+      setOriginalStackRoles(stackRoles);
       
       toast.success('✅ Roles de nivel guardados correctamente');
       return true;
@@ -85,6 +91,8 @@ export function useRoleSettings(guildId, config) {
   return {
     // Estados
     levelRoles,
+    stackRoles,
+    setStackRoles,
     selectedRoleForLevel,
     setSelectedRoleForLevel,
     selectedLevelForRole,
