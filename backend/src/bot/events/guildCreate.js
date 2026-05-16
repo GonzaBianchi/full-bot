@@ -1,10 +1,11 @@
-import { Events } from 'discord.js';
+import { Events, ActivityType } from 'discord.js';
 import Guild from '../../models/Guild.js';
+import logger from '../../utils/logger.js';
 
 export default {
   name: Events.GuildCreate,
   async execute(guild, client) {
-    console.log(`📥 Bot añadido al servidor: ${guild.name} (${guild.id})`);
+    logger.info(`📥 Bot añadido al servidor: ${guild.name} (${guild.id})`);
 
     try {
       // Crear configuración del servidor si no existe
@@ -18,7 +19,7 @@ export default {
           ownerId: guild.ownerId,
         });
 
-        console.log(`✅ Configuración creada para ${guild.name}`);
+        logger.info(`✅ Configuración creada para ${guild.name}`);
       } else {
         // Actualizar información del servidor
         guildConfig.name = guild.name;
@@ -40,14 +41,14 @@ export default {
           });
         }
       } catch (err) {
-        console.log('No se pudo enviar mensaje de bienvenida');
+        logger.info('No se pudo enviar mensaje de bienvenida');
       }
 
       // Actualizar el estado del bot
-      client.user.setActivity(`/rank | ${client.guilds.cache.size} servidores`, { type: 'PLAYING' });
+      client.user.setActivity(`/rank | ${client.guilds.cache.size} servidores`, { type: ActivityType.Playing });
 
     } catch (error) {
-      console.error('Error al procesar nuevo servidor:', error);
+      logger.error('Error al procesar nuevo servidor:', error);
     }
   }
 };

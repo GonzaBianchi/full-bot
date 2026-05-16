@@ -93,9 +93,9 @@ export async function setupMediaFilter(client) {
       }
       
       // Preparar mensaje personalizado
-      const customMsg = mediaFilter.customMessage
-        .replace(/\{author\}/g, message.author.username)
-        .replace(/\{mention\}/g, `<@${message.author.id}>`)
+      const customMsg = (mediaFilter.customMessage || '{author} compartió multimedia en #{channel}')
+        .replace(/\{author\}/g, message.author?.username ?? 'Alguien')
+        .replace(/\{mention\}/g, message.author ? `<@${message.author.id}>` : 'Alguien')
         .replace(/\{channel\}/g, message.channel.name);
       
       // Crear embed

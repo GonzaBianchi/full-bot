@@ -155,9 +155,15 @@ class BirthdayChecker {
         if (!dateInTimezone) continue;
 
         // Verificar si hoy es su cumpleaños
-        if (dateInTimezone.day !== birthday.day || dateInTimezone.month !== birthday.month) {
-          continue;
-        }
+        const isLeapYear = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+        const isFeb29Birthday = birthday.month === 2 && birthday.day === 29;
+        const celebrateOnFeb28 = isFeb29Birthday && !isLeapYear(dateInTimezone.year)
+          && dateInTimezone.month === 2 && dateInTimezone.day === 28;
+
+        const isToday = (dateInTimezone.day === birthday.day && dateInTimezone.month === birthday.month)
+          || celebrateOnFeb28;
+
+        if (!isToday) continue;
 
         // Verificar si ya se celebró hoy (evitar duplicados)
         if (this.wasAlreadyCelebratedToday(birthday.lastCelebrated)) {

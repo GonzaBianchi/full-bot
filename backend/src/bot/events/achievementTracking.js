@@ -32,7 +32,7 @@ export function setupAchievementTracking(client) {
       if (!reaction.message.guild || user.bot) return;
       
       // Trackear para el autor del mensaje (quien RECIBE la reacción)
-      if (!reaction.message.author.bot && reaction.message.author.id !== user.id) {
+      if (reaction.message.author && !reaction.message.author.bot && reaction.message.author.id !== user.id) {
         await achievementService.trackReaction(
           reaction.message.author.id, 
           reaction.message.guild.id,
