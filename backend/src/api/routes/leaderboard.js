@@ -5,6 +5,7 @@ import logger from '../../utils/logger.js';
 import { query, param, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import { xpForLevel } from '../../bot/utils/levelSystem.js';
+import { addSseClient, removeSseClient } from '../../utils/sseClients.js';
 
 const router = express.Router();
 
@@ -97,6 +98,22 @@ router.get('/:guildId', isAuthenticated, validatePagination, async (req, res) =>
     res.status(500).json({ error: 'Error al obtener leaderboard' });
   }
 });
+
+// ========== SSE: actualizaciones en tiempo real del leaderboard ==========
+router.get('/public/:guildId/events', publicLimiter, (req, res) => {
+  const { guildId } = req.params;
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.flushHeaders();
+  res.write('data: {"event":"connected"}\n\n');
+  addSseClient(guildId, res);
+  req.on('close', () => removeSseClient(guildId, res));
+});
+// =========================================================================
 
 // ========== RUTA PÚBLICA CON DISCORD FETCH ==========
 router.get('/public/:guildId', publicLimiter, validatePagination, async (req, res) => {

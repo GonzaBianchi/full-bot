@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import Guild from '../../models/Guild.js';
 import User from '../../models/User.js';
 import { levelFromXp } from '../utils/levelSystem.js';
@@ -14,45 +14,89 @@ export default {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: false }).catch(() => {});
     try {
-      const user = interaction.options.getUser('usuario');
-      const amount = Math.max(0, interaction.options.getInteger('cantidad') || 0);
+      const target = interaction.options.getUser('usuario');
+      const amount = interaction.options.getInteger('cantidad');
       const guildId = interaction.guild?.id;
-      if (!guildId) return interaction.editReply({ content: 'Este comando debe usarse en un servidor.' });
+      if (!guildId) return interaction.reply({ content: 'Este comando debe usarse en un servidor.', ephemeral: true });
 
-      // Obtener documento de usuario y calcular nuevo totalXp
-      const existing = await User.findOne({ guildId, userId: user.id });
-      const oldTotal = existing ? (existing.totalXp || 0) : 0;
-      const oldLevel = existing ? (existing.level || levelFromXp(oldTotal)) : levelFromXp(oldTotal);
-
+      const existing = await User.findOne({ guildId, userId: target.id }).lean();
+      const oldTotal = existing?.totalXp || 0;
+      const oldLevel = existing?.level ?? levelFromXp(oldTotal);
       const newTotal = Math.max(0, oldTotal - amount);
+      const newLevel = levelFromXp(newTotal);
 
-      // Use xpSystem to set total XP and get updated levels
-      const res = await setTotalXp(user.id, guildId, newTotal);
-      const newLevel = res.newLevel;
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle('⚠️ Confirmar resta de XP')
+        .setColor(0xFAA61A)
+        .setDescription(`¿Estás seguro de restar **${amount.toLocaleString()} XP** a ${target}?`)
+        .addFields(
+          { name: 'XP actual', value: oldTotal.toLocaleString(), inline: true },
+          { name: 'XP resultante', value: newTotal.toLocaleString(), inline: true },
+          { name: 'Nivel', value: `${oldLevel} → ${newLevel}`, inline: true }
+        )
+        .setFooter({ text: 'Esta acción expira en 30 segundos' });
 
-      // Fetch guild config once and member
-      const guildConfig = await Guild.findOne({ guildId }) || {};
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('rxp_confirm').setLabel('Confirmar').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('rxp_cancel').setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+      );
 
-      // Centralized effects: remove roles and (no announcement on downgrade) — postLevelChangeEffects handles both
-      const effects = await postLevelChangeEffects(interaction.guild, member, res.oldLevel, res.newLevel, guildConfig, null, user);
+      await interaction.reply({ embeds: [confirmEmbed], components: [row], ephemeral: true });
 
-      const removedNames = (effects.removed || []).map(id => interaction.guild.roles.cache.get(id)?.name || id);
-      const skippedNames = (effects.skipped || []).map(s => s.roleId ? (interaction.guild.roles.cache.get(s.roleId)?.name || s.roleId) : (s.reason || 'skipped'));
+      const collector = interaction.channel.createMessageComponentCollector({
+        filter: (btn) => btn.user.id === interaction.user.id && ['rxp_confirm', 'rxp_cancel'].includes(btn.customId),
+        time: 30 * 1000,
+        max: 1
+      });
 
-      let reply = `✅ Se han restado ${amount.toLocaleString()} XP a ${user.tag} (Total: ${newTotal.toLocaleString()})\n`;
-      reply += `Nivel: ${res.oldLevel} → ${res.newLevel}\n`;
-      reply += `Roles removidos: ${removedNames.length > 0 ? `${removedNames.length} — ${removedNames.join(', ')}` : '0'}\n`;
-      if ((effects.skipped || []).length > 0) reply += `Roles omitidos: ${effects.skipped.length} — ${[...new Set(skippedNames)].join(', ')}\n`;
+      collector.on('collect', async (btn) => {
+        await btn.deferUpdate();
 
-      await interaction.editReply({ content: reply });
+        if (btn.customId === 'rxp_cancel') {
+          return interaction.editReply({ content: '❌ Operación cancelada.', embeds: [], components: [] });
+        }
+
+        try {
+          const res = await setTotalXp(target.id, guildId, newTotal);
+          const guildConfig = await Guild.findOne({ guildId }) || {};
+          const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+          const effects = await postLevelChangeEffects(interaction.guild, member, res.oldLevel, res.newLevel, guildConfig, null, target);
+
+          const removedNames = (effects.removed || []).map(id => interaction.guild.roles.cache.get(id)?.name || id);
+
+          const resultEmbed = new EmbedBuilder()
+            .setTitle('✅ XP restada correctamente')
+            .setColor(0x43B581)
+            .addFields(
+              { name: 'Usuario', value: `${target}`, inline: true },
+              { name: 'XP restada', value: amount.toLocaleString(), inline: true },
+              { name: 'XP total', value: newTotal.toLocaleString(), inline: true },
+              { name: 'Nivel', value: `${res.oldLevel} → ${res.newLevel}`, inline: true },
+              { name: 'Roles removidos', value: removedNames.length > 0 ? removedNames.join(', ') : 'Ninguno', inline: true }
+            );
+
+          await interaction.editReply({ embeds: [resultEmbed], components: [] });
+        } catch (e) {
+          logger.error('Error ejecutando /restarxp:', e);
+          await interaction.editReply({ content: '❌ Error al restar XP. Revisa los logs.', embeds: [], components: [] });
+        }
+      });
+
+      collector.on('end', (collected) => {
+        if (collected.size === 0) {
+          interaction.editReply({ content: '⏱️ Confirmación expirada.', embeds: [], components: [] }).catch(() => {});
+        }
+      });
 
     } catch (e) {
       logger.error('Error en /restarxp:', e);
       try {
-        await interaction.editReply({ content: 'Error al restar XP. Revisa los logs.' });
+        if (interaction.replied || interaction.deferred) {
+          await interaction.editReply({ content: '❌ Error al procesar el comando.', embeds: [], components: [] });
+        } else {
+          await interaction.reply({ content: '❌ Error al procesar el comando.', ephemeral: true });
+        }
       } catch (_) {}
     }
   }

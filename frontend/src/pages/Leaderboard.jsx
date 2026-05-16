@@ -14,9 +14,31 @@ function Leaderboard() {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [guildInfo, setGuildInfo] = useState(null);
+  const [liveUpdate, setLiveUpdate] = useState(false);
 
   useEffect(() => {
     loadLeaderboard(currentPage);
+  }, [guildId, currentPage]);
+
+  // SSE: refrescar leaderboard en tiempo real cuando llegan actualizaciones
+  useEffect(() => {
+    const API_BASE = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com';
+    const url = `${API_BASE}/api/leaderboard/public/${guildId}/events`;
+    const es = new EventSource(url);
+
+    es.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.event === 'connected') return;
+        setLiveUpdate(true);
+        setTimeout(() => setLiveUpdate(false), 2000);
+        loadLeaderboard(currentPage);
+      } catch (_) {}
+    };
+
+    es.onerror = () => es.close();
+
+    return () => es.close();
   }, [guildId, currentPage]);
 
   const loadLeaderboard = async (page) => {
@@ -155,8 +177,12 @@ function Leaderboard() {
                     </div>
                   )}
                 </h1>
-                <p className="text-gray-400">
+                <p className="text-gray-400 flex items-center gap-2">
                   Top {pagination?.totalUsers || 0} usuarios más activos
+                  <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition-all ${liveUpdate ? 'bg-green-500/20 text-green-400' : 'bg-gray-700/50 text-gray-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${liveUpdate ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></span>
+                    En vivo
+                  </span>
                 </p>
               </div>
             </div>

@@ -3,6 +3,8 @@ import { xpPerMessage } from '../utils/levelSystem.js';
 import logger from '../../utils/logger.js';
 import { updateMemberRoles } from '../../utils/roleManager.js';
 import { getGuildConfig } from '../../utils/guildConfigCache.js';
+import { invalidateRankCard } from '../../utils/rankCardCache.js';
+import { notifyLeaderboardUpdate } from '../../utils/sseClients.js';
 
 // cooldown simple en memoria por guild+user (ms)
 const cooldowns = new Map(); // key: `${guildId}:${userId}` -> timestamp of last xp grant
@@ -34,6 +36,8 @@ export default async function onMessageCreate(message) {
     const xpToAdd = Math.max(1, Math.floor(baseXp * multiplier));
 
     const { user, leveledUp, oldLevel, newLevel } = await User.addXp(guildId, userId, xpToAdd);
+    invalidateRankCard(guildId, userId);
+    notifyLeaderboardUpdate(guildId);
 
     // Refrescar datos de Discord en BD en background (nombres/avatares actualizados)
     User.updateDiscordInfo(guildId, userId, message.author).catch(() => {});

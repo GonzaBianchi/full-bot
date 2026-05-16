@@ -1,6 +1,8 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
 import GuildModel from '../../models/Guild.js';
+import AuditLog from '../../models/AuditLog.js';
 import logger from '../../utils/logger.js';
 import { body, param, validationResult } from 'express-validator';
 import UserModel from '../../models/User.js';
@@ -9,6 +11,22 @@ import autoRolesRoutes from './autoRoles.js';
 import achievementsRoutes from './achievements.js';
 import mediaFilterRoutes from './mediaFilter.js';
 import { invalidateGuildConfig } from '../../utils/guildConfigCache.js';
+
+// Per-guild rate limiter for config mutation endpoints
+const guildConfigLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => `guild:${req.params.guildId || 'unknown'}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas peticiones. Intenta de nuevo en un minuto.' }
+});
+
+function auditLog(guildId, req, action, data = {}) {
+  AuditLog.create({ guildId, userId: req.user?.id || 'unknown', action, data }).catch(err =>
+    logger.warn('Error escribiendo audit log:', err.message)
+  );
+}
 
 const router = express.Router();
 
@@ -34,7 +52,7 @@ router.get('/:guildId/config', isAuthenticated, hasGuildPermission, async (req, 
 });
 
 // Actualizar multiplicador de XP (desde panel)
-router.post('/:guildId/config/xp-multiplier', isAuthenticated, hasGuildPermission, [
+router.post('/:guildId/config/xp-multiplier', isAuthenticated, hasGuildPermission, guildConfigLimiter, [
   param('guildId').exists(),
   body('multiplier').isFloat({ gt: 0 }),
   (req, res, next) => {
@@ -48,6 +66,7 @@ router.post('/:guildId/config/xp-multiplier', isAuthenticated, hasGuildPermissio
     const { multiplier } = req.body;
     let cfg = await GuildModel.findOneAndUpdate({ guildId }, { xpMultiplier: multiplier }, { new: true, upsert: true });
     invalidateGuildConfig(guildId);
+    auditLog(guildId, req, 'update_xp_multiplier', { multiplier });
     res.json({ config: cfg });
   } catch (e) {
     logger.error('Error al actualizar multiplier:', e);
@@ -56,7 +75,7 @@ router.post('/:guildId/config/xp-multiplier', isAuthenticated, hasGuildPermissio
 });
 
 // Actualizar canales ignorados
-router.post('/:guildId/config/ignored-channels', isAuthenticated, hasGuildPermission, [
+router.post('/:guildId/config/ignored-channels', isAuthenticated, hasGuildPermission, guildConfigLimiter, [
   param('guildId').exists(),
   body('channels').isArray(),
   (req, res, next) => {
@@ -70,6 +89,7 @@ router.post('/:guildId/config/ignored-channels', isAuthenticated, hasGuildPermis
     const { channels } = req.body;
     let cfg = await GuildModel.findOneAndUpdate({ guildId }, { ignoredChannels: channels }, { new: true, upsert: true });
     invalidateGuildConfig(guildId);
+    auditLog(guildId, req, 'update_ignored_channels', { channels });
     res.json({ config: cfg });
   } catch (e) {
     logger.error('Error al actualizar ignored channels:', e);
@@ -78,7 +98,7 @@ router.post('/:guildId/config/ignored-channels', isAuthenticated, hasGuildPermis
 });
 
 // Nueva ruta: actualizar notificaciones de leveo (panel)
-router.post('/:guildId/config/levelup', isAuthenticated, hasGuildPermission, [
+router.post('/:guildId/config/levelup', isAuthenticated, hasGuildPermission, guildConfigLimiter, [
   param('guildId').exists(),
   body('enabled').optional().isBoolean(),
   body('channelId')
@@ -115,6 +135,7 @@ router.post('/:guildId/config/levelup', isAuthenticated, hasGuildPermission, [
 
     const cfg = await GuildModel.findOneAndUpdate({ guildId }, update, { new: true, upsert: true });
     invalidateGuildConfig(guildId);
+    auditLog(guildId, req, 'update_levelup_config', update);
     logger.info(`✅ Configuración de levelup actualizada para guild ${guildId}`);
     res.json({ config: cfg });
   } catch (e) {
@@ -124,7 +145,7 @@ router.post('/:guildId/config/levelup', isAuthenticated, hasGuildPermission, [
 });
 
 // Nueva ruta: actualizar level roles (array de objetos {level, roleId}) + stackRoles
-router.post('/:guildId/config/level-roles', isAuthenticated, hasGuildPermission, [
+router.post('/:guildId/config/level-roles', isAuthenticated, hasGuildPermission, guildConfigLimiter, [
   param('guildId').exists(),
   body('roles').isArray(),
   body('roles.*.level').isInt({ min: 1 }),
@@ -143,6 +164,7 @@ router.post('/:guildId/config/level-roles', isAuthenticated, hasGuildPermission,
     if (typeof stackRoles === 'boolean') update.stackRoles = stackRoles;
     const cfg = await GuildModel.findOneAndUpdate({ guildId }, update, { new: true, upsert: true });
     invalidateGuildConfig(guildId);
+    auditLog(guildId, req, 'update_level_roles', { rolesCount: roles.length, stackRoles });
     res.json({ config: cfg });
   } catch (e) {
     logger.error('Error al actualizar level roles:', e);
@@ -538,5 +560,20 @@ router.delete('/:guildId/config/images/:type',
     }
   }
 );
+
+// Obtener audit log del servidor (últimas 50 entradas)
+router.get('/:guildId/audit-log', isAuthenticated, hasGuildPermission, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const entries = await AuditLog.find({ guildId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+    res.json({ entries });
+  } catch (e) {
+    logger.error('Error al obtener audit log:', e);
+    res.status(500).json({ error: 'Error al obtener audit log' });
+  }
+});
 
 export default router;

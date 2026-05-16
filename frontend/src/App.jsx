@@ -23,7 +23,7 @@ function AppContent({ user, onLogout }) {
       {showNavbar && <Navbar user={user} onLogout={onLogout} />}
       <div className={`flex-1 ${isGuildSettingsRoute ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Home user={user} />} />
           <Route path="/dashboard" element={<div className="p-6">Bienvenido al dashboard</div>} />
           
           {/* ========== RUTA PÚBLICA: Leaderboard ========== */}
@@ -81,11 +81,11 @@ function App() {
     )
   }
 
-  // ========== IMPORTANTE: Permitir acceso sin autenticación a leaderboard ==========
+  // ========== IMPORTANTE: Rutas públicas (sin autenticación) ==========
   const currentPath = window.location.pathname;
-  const isLeaderboardRoute = currentPath.includes('/leaderboard');
-  
-  if (!user && !isLeaderboardRoute) {
+  const isPublicRoute = currentPath.includes('/leaderboard') || currentPath === '/';
+
+  if (!user && !isPublicRoute) {
     const API_BASE = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com'
     const loginUrl = `${API_BASE}/api/auth/login?redirect=${encodeURIComponent('/')}`
     

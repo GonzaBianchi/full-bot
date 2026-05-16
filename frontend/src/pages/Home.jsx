@@ -3,35 +3,22 @@ import { Users, Settings, TrendingUp, Shield, ExternalLink } from 'lucide-react'
 import { authService, guildService } from '../services/api';
 import { Link } from 'react-router-dom';
 
-function Home() {
+function Home({ user }) {
   const [botInfo, setBotInfo] = useState(null);
   const [available, setAvailable] = useState({ manageable: [], invitables: [] });
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [user]);
 
-  // Detectar cuando la ventana vuelve a tener foco (usuario regresa después de invitar)
+  // Recargar servidores cuando el usuario regrese de Discord (solo si está autenticado)
   useEffect(() => {
-    const handleFocus = () => {
-      // Recargar la lista de servidores cuando el usuario regrese de Discord
-      loadAvailableGuilds();
-    };
-
+    if (!user) return;
+    const handleFocus = () => loadAvailableGuilds();
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const response = await authService.getMe();
-      setUser(response.data);
-    } catch (error) {
-      setUser(null);
-    }
-  };
+  }, [user]);
 
   const loadAvailableGuilds = async () => {
     try {
@@ -44,15 +31,12 @@ function Home() {
 
   const load = async () => {
     try {
-      await loadUser();
-      const [botRes, availRes] = await Promise.all([
-        guildService.getBotInfo().catch(() => null),
-        guildService.getAvailable().catch(() => ({ data: { manageable: [], invitables: [] } }))
-      ]);
-      
+      const promises = [guildService.getBotInfo().catch(() => null)];
+      if (user) promises.push(guildService.getAvailable().catch(() => ({ data: { manageable: [], invitables: [] } })));
+
+      const [botRes, availRes] = await Promise.all(promises);
       setBotInfo(botRes?.data);
-      setAvailable(availRes?.data || { manageable: [], invitables: [] });
-      console.log(botRes?.data);
+      if (availRes) setAvailable(availRes?.data || { manageable: [], invitables: [] });
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
@@ -171,7 +155,20 @@ function Home() {
             </div>
             
             <div className="p-6">
-              {available.manageable.length === 0 ? (
+              {!user ? (
+                <div className="text-center py-12">
+                  <div className="bg-gray-700/30 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                    <Settings className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <p className="text-gray-400 mb-4">Inicia sesión para gestionar tus servidores</p>
+                  <a
+                    href={authService.login('/dashboard')}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center space-x-2"
+                  >
+                    <span>Iniciar sesión con Discord</span>
+                  </a>
+                </div>
+              ) : available.manageable.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="bg-gray-700/30 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                     <Settings className="w-8 h-8 text-gray-500" />
@@ -242,7 +239,20 @@ function Home() {
             </div>
             
             <div className="p-6">
-              {available.invitables.length === 0 ? (
+              {!user ? (
+                <div className="text-center py-12">
+                  <div className="bg-gray-700/30 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                    <Users className="w-8 h-8 text-gray-500" />
+                  </div>
+                  <p className="text-gray-400 mb-4">Inicia sesión para ver tus servidores disponibles</p>
+                  <a
+                    href={authService.login('/dashboard')}
+                    className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center space-x-2"
+                  >
+                    <span>Iniciar sesión con Discord</span>
+                  </a>
+                </div>
+              ) : available.invitables.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="bg-gray-700/30 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                     <Users className="w-8 h-8 text-gray-500" />

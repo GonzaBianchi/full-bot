@@ -5,6 +5,7 @@ import Guild from '../../models/Guild.js';
 import { xpForLevel } from '../utils/levelSystem.js';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import logger from '../../utils/logger.js';
+import { getRankCard, setRankCard } from '../../utils/rankCardCache.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -35,9 +36,16 @@ export default {
       const userDoc = await User.findOne({ guildId, userId: target.id }).lean();
 
       if (!userDoc) {
-        return await interaction.editReply({ 
-          content: `❌ No se encontró información de nivel para ${target.username}.\nEl usuario aún no ha ganado XP en este servidor.` 
+        return await interaction.editReply({
+          content: `❌ No se encontró información de nivel para ${target.username}.\nEl usuario aún no ha ganado XP en este servidor.`
         });
+      }
+
+      // Servir desde caché si está disponible
+      const cached = getRankCard(guildId, target.id);
+      if (cached) {
+        const attachment = new AttachmentBuilder(cached, { name: 'rank.png' });
+        return await interaction.editReply({ files: [attachment] });
       }
 
       // Buscar configuración de imagen del guild
@@ -240,8 +248,9 @@ export default {
 
       // === ENVIAR IMAGEN ===
       const buffer = canvas.toBuffer('image/png');
+      setRankCard(guildId, target.id, buffer);
       const attachment = new AttachmentBuilder(buffer, { name: 'rank.png' });
-      
+
       await interaction.editReply({ files: [attachment] });
       logger.info(`✅ Rank card generada exitosamente para ${target.username}`);
 
