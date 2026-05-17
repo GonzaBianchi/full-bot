@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { leaderboardService, guildService } from '../services/api';
+import { leaderboardService, guildService, authService } from '../services/api';
 import { Trophy, Medal, Award, ArrowLeft, ChevronLeft, ChevronRight, Home } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -17,13 +17,18 @@ function Leaderboard() {
   const [liveUpdate, setLiveUpdate] = useState(false);
 
   useEffect(() => {
+    authService.getMe()
+      .then(() => setIsAuthenticated(true))
+      .catch(() => setIsAuthenticated(false));
+  }, []);
+
+  useEffect(() => {
     loadLeaderboard(currentPage);
   }, [guildId, currentPage]);
 
   // SSE: refrescar leaderboard en tiempo real cuando llegan actualizaciones
   useEffect(() => {
-    const API_BASE = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com';
-    const url = `${API_BASE}/api/leaderboard/public/${guildId}/events`;
+    const url = `${import.meta.env.VITE_API_URL ?? ''}/api/leaderboard/public/${guildId}/events`;
     const es = new EventSource(url);
 
     es.onmessage = (e) => {
@@ -50,7 +55,6 @@ function Leaderboard() {
         const response = await leaderboardService.getPublic(guildId, page);
         setLeaderboard(response.data.leaderboard);
         setPagination(response.data.pagination);
-        setIsAuthenticated(false);
       } catch (publicError) {
         // Si falla público, intentar con autenticado (fallback)
         console.log('Endpoint público falló, intentando autenticado');
@@ -139,7 +143,7 @@ function Leaderboard() {
 
             {!isAuthenticated && (
               <a
-                href={`${import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com'}/api/auth/login?redirect=/guild/${guildId}/leaderboard`}
+                href={`${import.meta.env.VITE_API_URL ?? ''}/api/auth/login?redirect=/guild/${guildId}/leaderboard`}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 Iniciar Sesión

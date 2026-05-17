@@ -2,16 +2,13 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com',
+  baseURL: import.meta.env.VITE_API_URL ?? '',
   withCredentials: true,
 });
 
 export const authService = {
   getMe: () => api.get('/api/auth/me'),
-  login: (redirect) => {
-    const baseURL = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com';
-    return `${baseURL}/api/auth/login?redirect=${encodeURIComponent(redirect)}`;
-  }
+  login: (redirect) => `${import.meta.env.VITE_API_URL ?? ''}/api/auth/login?redirect=${encodeURIComponent(redirect)}`
 };
 
 export const guildService = {

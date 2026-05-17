@@ -13,7 +13,7 @@ function AppContent({ user, onLogout }) {
   const location = useLocation();
   
   // Determinar si la ruta actual necesita Navbar
-  const showNavbar = !location.pathname.includes('/leaderboard');
+  const showNavbar = !location.pathname.includes('/leaderboard') && !!user;
   
   // Determinar si la ruta actual necesita layout con sidebar (GuildSettings)
   const isGuildSettingsRoute = location.pathname.includes('/guild/') && !location.pathname.includes('/leaderboard');
@@ -60,9 +60,8 @@ function App() {
   }
 
   const onLogout = async () => {
-    const API_BASE = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com'
     try {
-      await fetch(`${API_BASE}/api/auth/logout`, { 
+      await fetch(`${import.meta.env.VITE_API_URL ?? ''}/api/auth/logout`, {
         method: 'POST', 
         credentials: 'include' 
       })
@@ -86,8 +85,7 @@ function App() {
   const isPublicRoute = currentPath.includes('/leaderboard') || currentPath === '/';
 
   if (!user && !isPublicRoute) {
-    const API_BASE = import.meta.env.VITE_API_URL || 'https://therifthavenfullbot.onrender.com'
-    const loginUrl = `${API_BASE}/api/auth/login?redirect=${encodeURIComponent('/')}`
+    const loginUrl = `${import.meta.env.VITE_API_URL ?? ''}/api/auth/login?redirect=${encodeURIComponent('/')}`
     
     return (
       <div className="min-h-screen flex items-center justify-center bg-discord-dark">

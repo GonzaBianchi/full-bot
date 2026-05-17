@@ -12,7 +12,7 @@ export function ImageBannerSettings({ guildId, type = 'achievement-notification'
   const [preview, setPreview] = useState(false);
   const [tempUrl, setTempUrl] = useState('');
 
-  const API_URL = import.meta.env?.VITE_API_URL || 'https://therifthavenfullbot.onrender.com';
+  const API_URL = import.meta.env?.VITE_API_URL ?? '';
 
   useEffect(() => {
     loadConfig();
