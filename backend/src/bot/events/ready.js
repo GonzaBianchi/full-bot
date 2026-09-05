@@ -1,35 +1,45 @@
 import { Events, ActivityType } from 'discord.js';
+import logger from '../../utils/logger.js';
+
+const PRESENCE_ROTATION_MS = 5 * 60 * 1000;
+
+let rotationTimer = null;
+
+function activitiesFor(client) {
+  return [
+    { name: `/rank | ${client.guilds.cache.size} servidores`, type: ActivityType.Playing },
+    { name: 'niveles y XP', type: ActivityType.Watching },
+    { name: 'el dashboard', type: ActivityType.Watching },
+  ];
+}
+
+/** Detiene la rotación de presencia. La llama el shutdown de BotApp. */
+export function stopPresenceRotation() {
+  if (rotationTimer) {
+    clearInterval(rotationTimer);
+    rotationTimer = null;
+  }
+}
 
 export default {
   name: Events.ClientReady,
   once: true,
   async execute(client) {
-    console.log(`✅ Bot conectado como ${client.user.tag}`);
-    console.log(`📊 Servidores: ${client.guilds.cache.size}`);
-    console.log(`👥 Usuarios: ${client.users.cache.size}`);
+    logger.info(`Bot conectado como ${client.user.tag} — ${client.guilds.cache.size} servidores`);
 
-    // Establecer estado del bot
     client.user.setPresence({
-      activities: [{
-        name: `/rank | ${client.guilds.cache.size} servidores`,
-        type: ActivityType.Playing
-      }],
+      activities: [activitiesFor(client)[0]],
       status: 'online'
     });
 
-    // Actualizar estado cada 5 minutos
-    setInterval(() => {
-      const activities = [
-        { name: `/rank | ${client.guilds.cache.size} servidores`, type: ActivityType.Playing },
-        { name: 'niveles y XP', type: ActivityType.Watching },
-        { name: 'el dashboard', type: ActivityType.Watching },
-      ];
-
+    // Un solo timer, guardado para poder limpiarlo: antes se creaba sin
+    // referencia y sobrevivía al shutdown.
+    stopPresenceRotation();
+    rotationTimer = setInterval(() => {
+      const activities = activitiesFor(client);
       const randomActivity = activities[Math.floor(Math.random() * activities.length)];
-      client.user.setPresence({
-        activities: [randomActivity],
-        status: 'online'
-      });
-    }, 5 * 60 * 1000);
+      client.user.setPresence({ activities: [randomActivity], status: 'online' });
+    }, PRESENCE_ROTATION_MS);
+    rotationTimer.unref();
   }
 };

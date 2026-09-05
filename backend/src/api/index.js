@@ -7,8 +7,10 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import mongoose from 'mongoose';
 import MongoStore from 'connect-mongo';
+import { mongoClientPromise } from '../database/connection.js';
 
 import logger from '../utils/logger.js';
+import { sanitizeMongoInput } from './middleware/sanitize.js';
 
 // Importar rutas
 import authRoutes from './routes/auth.js';
@@ -33,7 +35,11 @@ class ApiServer {
       this.app.set('trust proxy', 1);
     }
 
-    // CORS
+    // CORS. Sin origin explícito, `cors` responde `*`, que con credentials:true
+    // el navegador rechaza: el login fallaría en silencio.
+    if (!process.env.FRONTEND_URL) {
+      throw new Error('FRONTEND_URL no configurado: CORS con credenciales necesita un origen explícito');
+    }
     this.app.use(cors({
       origin: process.env.FRONTEND_URL,
       credentials: true
@@ -43,8 +49,9 @@ class ApiServer {
     this.app.use(helmet());
 
     // Body parser
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: true }));
+    this.app.use(express.json({ limit: '100kb' }));
+    this.app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+    this.app.use(sanitizeMongoInput);
 
     // Simple request logger
     this.app.use((req, res, next) => {
@@ -65,13 +72,14 @@ class ApiServer {
       res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
       next();
     });
-
     // Session
+    const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 horas
+
     const sessionCookie = {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 24 horas
+      maxAge: SESSION_MAX_AGE_MS
     };
 
     const secret = process.env.SESSION_SECRET;
@@ -79,20 +87,28 @@ class ApiServer {
       throw new Error('SESSION_SECRET no configurado o demasiado corto (mínimo 32 caracteres)');
     }
 
+    // Sin store persistente express-session cae en MemoryStore, que pierde
+    // las sesiones en cada reinicio y crece sin límite. Es un fallo de
+    // configuración, no un modo de funcionamiento válido.
+    if (!process.env.MONGODB_URI) {
+      throw new Error('MONGODB_URI no configurado: la sesión necesita un store persistente');
+    }
+
     const sessionOptions = {
       secret,
       resave: false,
       saveUninitialized: false,
-      cookie: sessionCookie
-    };
-
-    if (process.env.MONGODB_URI) {
-      sessionOptions.store = MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI,
+      cookie: sessionCookie,
+      store: MongoStore.create({
+        // Reutiliza el pool de Mongoose en vez de abrir una segunda conexión.
+        // La promesa se resuelve cuando BotApp completa connect().
+        clientPromise: mongoClientPromise(),
         collectionName: 'sessions',
-        ttl: 14 * 24 * 60 * 60
-      });
-    }
+        // Alineado con la cookie: con 14 días quedaban documentos huérfanos
+        // 13 días después de que la sesión dejara de ser utilizable.
+        ttl: SESSION_MAX_AGE_MS / 1000
+      })
+    };
 
     this.app.use(session(sessionOptions));
 
@@ -107,10 +123,23 @@ class ApiServer {
     this.app.use(passport.initialize());
     this.app.use(passport.session());
   }
-
   setupPassport() {
+    // La sesión guarda solo lo que la API necesita. Antes se serializaba el
+    // profile completo de Discord: eso dejaba el access token en claro en la
+    // colección `sessions` y hacía documentos de decenas de KB en cada request.
     passport.serializeUser((user, done) => {
-      done(null, user);
+      done(null, {
+        id: user.id,
+        username: user.username,
+        discriminator: user.discriminator,
+        avatar: user.avatar,
+        guilds: (user.guilds || []).map(g => ({
+          id: g.id,
+          name: g.name,
+          icon: g.icon,
+          permissions: String(g.permissions ?? '0')
+        }))
+      });
     });
 
     passport.deserializeUser((obj, done) => {
@@ -123,7 +152,7 @@ class ApiServer {
       callbackURL: process.env.OAUTH_REDIRECT_URI,
       scope: ['identify', 'guilds']
     }, (accessToken, refreshToken, profile, done) => {
-      profile.accessToken = accessToken;
+      // El access token no se conserva: ninguna ruta lo usa.
       return done(null, profile);
     }));
   }
@@ -189,61 +218,69 @@ class ApiServer {
       res.status(404).json({ error: 'Ruta no encontrada' });
     });
 
-    // Error handler
+    // Error handler. Antes respondía 500 a todo: un JSON malformado (400 de
+    // body-parser) o un ObjectId inválido en la ruta (CastError) salían como
+    // error interno, ocultando que el fallo era del cliente.
+    // eslint-disable-next-line no-unused-vars
     this.app.use((err, req, res, next) => {
+      let status = Number(err?.status || err?.statusCode) || 500;
+      let error = 'Error interno del servidor';
+
+      if (err?.name === 'CastError') {
+        status = 400;
+        error = 'Identificador inválido';
+      } else if (err?.name === 'ValidationError') {
+        status = 400;
+        error = 'Datos inválidos';
+      } else if (err?.code === 11000) {
+        status = 409;
+        error = 'El recurso ya existe';
+      } else if (status >= 400 && status < 500) {
+        error = 'Petición inválida';
+      }
+
       try {
-        logger.error('❌ Error en API:', err && err.stack ? err.stack : err);
+        if (status >= 500) {
+          logger.error('Error en API:', err?.stack || err);
+        } else {
+          logger.warn(`Petición rechazada (${status}): ${err?.message || err}`);
+        }
       } catch (e) {
         console.error('Error logger fallback:', e);
         console.error(err);
       }
 
-      res.status(500).json({ 
-        error: 'Error interno del servidor',
-        message: process.env.NODE_ENV === 'development' ? (err && err.message) : undefined
+      res.status(status).json({
+        error,
+        message: process.env.NODE_ENV === 'development' ? err?.message : undefined
       });
     });
   }
 
-  async shutdown() {
-    logger.info('Iniciando shutdown...');
-    try {
-      if (this.server) {
-        this.server.close(() => {
-          logger.info('Servidor HTTP cerrado');
-        });
-      }
+  /**
+   * Cierra solo el servidor HTTP y espera a que drene. El ciclo de vida del
+   * cliente de Discord, de las señales y de Mongoose lo lleva BotApp: tenerlo
+   * también aquí provocaba dos apagados simultáneos.
+   */
+  shutdown() {
+    return new Promise((resolve) => {
+      if (!this.server) return resolve();
 
-      if (this.discordClient && typeof this.discordClient.destroy === 'function') {
-        try {
-          await this.discordClient.destroy();
-          logger.info('Cliente de Discord desconectado');
-        } catch (e) {
-          logger.warn('Error cerrando cliente de Discord:', e);
-        }
-      }
-    } catch (e) {
-      logger.error('Error durante shutdown:', e);
-    } finally {
-      setTimeout(() => process.exit(0), 500);
-    }
+      this.server.close(() => {
+        logger.info('Servidor HTTP cerrado');
+        resolve();
+      });
+
+      // Si alguna conexión no cierra (SSE, keep-alive), no bloqueamos el
+      // apagado indefinidamente.
+      setTimeout(resolve, 5000).unref();
+    });
   }
 
   start(port) {
     return new Promise((resolve) => {
       this.server = this.app.listen(port, () => {
-        logger.info(`🚀 API ejecutándose en puerto ${port}`);
-        
-        process.on('SIGINT', () => {
-          logger.info('SIGINT recibido, cerrando...');
-          this.shutdown();
-        });
-        
-        process.on('SIGTERM', () => {
-          logger.info('SIGTERM recibido, cerrando...');
-          this.shutdown();
-        });
-
+        logger.info(`API ejecutándose en puerto ${port}`);
         resolve(this.server);
       });
     });

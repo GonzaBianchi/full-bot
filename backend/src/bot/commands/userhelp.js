@@ -1,4 +1,6 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { dashboardUrl } from '../../utils/urls.js';
+import { describeCommands, commandFields } from '../../utils/commandHelp.js';
 import logger from '../../utils/logger.js';
 
 export default {
@@ -8,63 +10,22 @@ export default {
 
   async execute(interaction) {
     try {
-      // Comandos públicos
-      const userCommands = [
-        {
-          name: '/rank',
-          description: 'Muestra tu tarjeta de nivel y progreso',
-          usage: '/rank [@usuario]'
-        },
-        {
-          name: '/leaderboard',
-          description: 'Muestra el ranking de usuarios del servidor',
-          usage: '/leaderboard [página]'
-        },
-        {
-          name: '/logros',
-          description: 'Muestra tus logros desbloqueados y progreso',
-          usage: '/logros [@usuario]'
-        },
-        {
-          name: '/botinfo',
-          description: 'Información sobre el bot (estadísticas, enlaces)',
-          usage: '/botinfo'
-        },
-        {
-          name: '/userhelp',
-          description: 'Muestra este mensaje de ayuda',
-          usage: '/userhelp'
-        }
-      ];
+      // Generado desde el registro de comandos: la lista a mano se había
+      // quedado desactualizada.
+      const commands = describeCommands({ adminOnly: false });
 
       const embed = new EmbedBuilder()
         .setTitle('📚 Comandos para Usuarios')
         .setColor(0x5865F2)
-        .setDescription('Lista de comandos disponibles para todos los usuarios del servidor.');
-
-      // Agregar comandos de usuario
-      let userCommandsText = '';
-      userCommands.forEach(cmd => {
-        userCommandsText += `**${cmd.name}**\n${cmd.description}\n\`${cmd.usage}\`\n\n`;
-      });
-
-      embed.addFields({
-        name: '👤 Comandos Disponibles',
-        value: userCommandsText,
-        inline: false
-      });
-
-      // Panel web
-      embed.addFields({
-        name: '🌐 Panel Web',
-        value: `Configura el bot desde el [Panel Web](${process.env.FRONTEND_URL || 'https://therifthavenfull.vercel.app'})`,
-        inline: false
-      });
-
-      embed.setFooter({ 
-        text: 'Para ver comandos de administrador, usa /adminhelp' 
-      });
-      embed.setTimestamp();
+        .setDescription('Lista de comandos disponibles para todos los usuarios del servidor.')
+        .addFields(...commandFields(commands, '👤 Comandos Disponibles'))
+        .addFields({
+          name: '🌐 Panel Web',
+          value: `Configura el bot desde el [Panel Web](${dashboardUrl()})`,
+          inline: false
+        })
+        .setFooter({ text: 'Para ver comandos de administrador, usa /adminhelp' })
+        .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
       logger.info(`Comando userhelp ejecutado por ${interaction.user.tag}`);
@@ -72,8 +33,8 @@ export default {
       logger.error('Error en comando userhelp:', error);
       await interaction.reply({
         content: '❌ Hubo un error al mostrar la ayuda.',
-        ephemeral: true
-      });
+        flags: MessageFlags.Ephemeral
+      }).catch(() => {});
     }
   }
 };

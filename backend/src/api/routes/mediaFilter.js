@@ -3,6 +3,7 @@ import express from 'express';
 import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
 import GuildModel from '../../models/Guild.js';
 import logger from '../../utils/logger.js';
+import { invalidateGuildConfig } from '../../utils/guildConfigCache.js';
 import { body, param, validationResult } from 'express-validator';
 
 const router = express.Router();
@@ -15,10 +16,13 @@ router.get('/:guildId/config/media-filter',
     try {
       const { guildId } = req.params;
       
-      let cfg = await GuildModel.findOne({ guildId }).lean();
-      if (!cfg) {
-        cfg = await GuildModel.create({ guildId });
-      }
+      // Un GET no debe escribir: si el servidor aún no tiene documento,
+      
+      // devolvemos los defaults del esquema sin crearlo.
+      
+      const cfg = await GuildModel.findOne({ guildId }).lean()
+      
+        || new GuildModel({ guildId }).toObject();
 
       res.json({ 
         mediaFilter: cfg.mediaFilter || {
@@ -91,6 +95,7 @@ router.post('/:guildId/config/media-filter',
       );
 
       logger.info(`✅ Configuración de media filter actualizada para guild ${guildId}`);
+      invalidateGuildConfig(guildId);
       res.json({ mediaFilter: cfg.mediaFilter });
     } catch (error) {
       logger.error('Error actualizando media filter:', error);
@@ -125,6 +130,7 @@ router.delete('/:guildId/config/media-filter',
       );
 
       logger.info(`✅ Configuración de media filter reseteada para guild ${guildId}`);
+      invalidateGuildConfig(guildId);
       res.json({ mediaFilter: cfg.mediaFilter });
     } catch (error) {
       logger.error('Error reseteando media filter:', error);

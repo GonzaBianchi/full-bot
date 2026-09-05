@@ -1,87 +1,65 @@
 // frontend/src/hooks/useRoleSettings.js
-import { useState, useEffect } from 'react';
-import { guildService } from '../services/api';
+import { useState } from 'react';
+import { guildService, getApiError } from '../services/api';
 import { toast } from 'react-hot-toast';
-import { useUnsavedChanges } from './useUnsavedChanges';
+import { useDraft } from './useDraft';
+import { useGuildInvalidation } from './queries';
 
 export function useRoleSettings(guildId, config) {
-  // Estados actuales
-  const [levelRoles, setLevelRoles] = useState([]);
-  const [stackRoles, setStackRoles] = useState(false);
+  const saved = {
+    levelRoles: (config?.levelRoles ?? []).map(({ level, roleId }) => ({ level, roleId })),
+    stackRoles: config?.stackRoles ?? false
+  };
+
+  const { draft, setDraft, hasChanges, markSaved, discard } = useDraft(saved);
   const [selectedRoleForLevel, setSelectedRoleForLevel] = useState('');
   const [selectedLevelForRole, setSelectedLevelForRole] = useState('1');
-
-  // Estados originales
-  const [originalLevelRoles, setOriginalLevelRoles] = useState([]);
-  const [originalStackRoles, setOriginalStackRoles] = useState(false);
-  
   const [saving, setSaving] = useState(false);
+  const { invalidateConfig } = useGuildInvalidation(guildId);
 
-  // Inicializar valores
-  useEffect(() => {
-    if (config) {
-      const roles = config.levelRoles || [];
-      setLevelRoles(roles);
-      setOriginalLevelRoles([...roles]);
-      setStackRoles(config.stackRoles ?? false);
-      setOriginalStackRoles(config.stackRoles ?? false);
-    }
-  }, [config]);
+  const isRoleUsed = (roleId) => draft.levelRoles.some(lr => lr.roleId === roleId);
+  const isLevelUsed = (level) => draft.levelRoles.some(lr => lr.level === parseInt(level, 10));
 
-  // Detectar cambios
-  const rolesChanged = useUnsavedChanges(levelRoles, originalLevelRoles);
-  const hasChanges = rolesChanged || stackRoles !== originalStackRoles;
-
-  // Verificar si un rol ya está siendo usado
-  const isRoleUsed = (roleId) => {
-    return levelRoles.some(lr => lr.roleId === roleId);
-  };
-
-  // Verificar si un nivel ya tiene un rol asignado
-  const isLevelUsed = (level) => {
-    return levelRoles.some(lr => lr.level === parseInt(level));
-  };
-
-  // Agregar nuevo rol de nivel
   const addLevelRole = () => {
     if (!selectedRoleForLevel || !selectedLevelForRole) return;
-    
-    const level = parseInt(selectedLevelForRole);
-    
+
+    const level = parseInt(selectedLevelForRole, 10);
+
     if (isLevelUsed(level)) {
       toast.error('Ya existe un rol asignado a este nivel');
       return;
     }
-    
-    setLevelRoles([...levelRoles, { level, roleId: selectedRoleForLevel }]);
+
+    setDraft(prev => ({
+      ...prev,
+      levelRoles: [...prev.levelRoles, { level, roleId: selectedRoleForLevel }]
+    }));
     setSelectedRoleForLevel('');
     setSelectedLevelForRole('1');
   };
 
-  // Remover rol de nivel
   const removeLevelRole = (level) => {
-    setLevelRoles(levelRoles.filter(lr => lr.level !== level));
+    setDraft(prev => ({
+      ...prev,
+      levelRoles: prev.levelRoles.filter(lr => lr.level !== level)
+    }));
   };
 
-  // Obtener roles ordenados por nivel
-  const getSortedRoles = () => {
-    return [...levelRoles].sort((a, b) => a.level - b.level);
-  };
+  // Copia antes de ordenar: `sort()` sobre el estado lo reordenaba in place.
+  const getSortedRoles = () => [...draft.levelRoles].sort((a, b) => a.level - b.level);
 
-  // Guardar cambios
   const save = async () => {
     setSaving(true);
     try {
-      await guildService.updateLevelRoles(guildId, levelRoles, stackRoles);
+      await guildService.updateLevelRoles(guildId, draft.levelRoles, draft.stackRoles);
 
-      setOriginalLevelRoles([...levelRoles]);
-      setOriginalStackRoles(stackRoles);
-      
+      markSaved();
+      await invalidateConfig();
       toast.success('✅ Roles de nivel guardados correctamente');
       return true;
     } catch (error) {
       console.error('Error guardando roles:', error);
-      toast.error('❌ Error al guardar los roles');
+      toast.error(getApiError(error, 'Error al guardar los roles'));
       return false;
     } finally {
       setSaving(false);
@@ -89,24 +67,22 @@ export function useRoleSettings(guildId, config) {
   };
 
   return {
-    // Estados
-    levelRoles,
-    stackRoles,
-    setStackRoles,
+    levelRoles: draft.levelRoles,
+    stackRoles: draft.stackRoles,
+    setStackRoles: (value) => setDraft(prev => ({ ...prev, stackRoles: value })),
     selectedRoleForLevel,
     setSelectedRoleForLevel,
     selectedLevelForRole,
     setSelectedLevelForRole,
-    
-    // Acciones
+
     addLevelRole,
     removeLevelRole,
     getSortedRoles,
     isRoleUsed,
     isLevelUsed,
     save,
-    
-    // Estado
+    discard,
+
     saving,
     hasChanges
   };

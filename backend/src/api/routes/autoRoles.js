@@ -3,6 +3,7 @@ import express from 'express';
 import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
 import GuildModel from '../../models/Guild.js';
 import logger from '../../utils/logger.js';
+import { invalidateGuildConfig } from '../../utils/guildConfigCache.js';
 import { body, param, validationResult } from 'express-validator';
 
 const router = express.Router();
@@ -11,11 +12,10 @@ const router = express.Router();
 router.get('/:guildId/config/auto-roles', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId } = req.params;
-    let cfg = await GuildModel.findOne({ guildId });
-    
-    if (!cfg) {
-      cfg = await GuildModel.create({ guildId });
-    }
+    // Un GET no debe escribir: si el servidor aún no tiene documento,
+    // devolvemos los defaults del esquema sin crearlo.
+    const cfg = await GuildModel.findOne({ guildId }).lean()
+      || new GuildModel({ guildId }).toObject();
     
     res.json({ 
       autoRoles: cfg.autoRoles || {
@@ -69,6 +69,7 @@ router.post('/:guildId/config/auto-roles', isAuthenticated, hasGuildPermission, 
     );
     
     logger.info(`✅ Auto-roles config updated for guild ${guildId}`);
+    invalidateGuildConfig(guildId);
     res.json({ autoRoles: cfg.autoRoles });
   } catch (e) {
     logger.error('Error al actualizar config de auto-roles:', e);

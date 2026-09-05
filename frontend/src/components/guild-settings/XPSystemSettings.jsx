@@ -1,10 +1,7 @@
 // frontend/src/components/guild-settings/XPSystemSettings.jsx
 import { Zap } from 'lucide-react';
-import { useGeneralSettings } from '../../hooks/useGeneralSettings';
-import { useNotificationSettings } from '../../hooks/useNotificationSettings';
-import { useRoleSettings } from '../../hooks/useRoleSettings';
+import { useGuildSettings } from '../../hooks/useGuildSettings';
 import { StickyActionBar } from '../ui/StickyActionBar';
-import { StyledSelect } from '../ui/StyledSelect';
 import { XPMultiplier } from './XPMultiplier';
 import { IgnoredChannels } from './IgnoredChannels';
 import { LevelUpConfig } from './LevelUpConfig';
@@ -13,40 +10,45 @@ import { LevelRolesList } from './LevelRolesList';
 import { ImageBannerSettings } from './ImageBannerSettings';
 import { InfoAlert } from '../ui/InfoAlert';
 
-export function XPSystemSettings({ guildId, config, channels, roles }) {
-  // Hooks para cada subsección
-  const generalSettings = useGeneralSettings(guildId, config);
-  const notificationSettings = useNotificationSettings(guildId, config);
-  const roleSettings = useRoleSettings(guildId, config);
+export function XPSystemSettings() {
+  // Las tres secciones comparten la instancia del contexto: antes este
+  // componente creaba una copia propia de los hooks, así que el sidebar
+  // vigilaba un estado que nadie estaba editando.
+  const {
+    guildId,
+    channels,
+    roles,
+    general: generalSettings,
+    notifications: notificationSettings,
+    levelRoles: roleSettings
+  } = useGuildSettings();
 
-  // Combinar el estado de cambios
-  const hasChanges = 
-    generalSettings.hasChanges || 
-    notificationSettings.hasChanges || 
+  const hasChanges =
+    generalSettings.hasChanges ||
+    notificationSettings.hasChanges ||
     roleSettings.hasChanges;
 
-  // Combinar el estado de guardando
-  const saving = 
-    generalSettings.saving || 
-    notificationSettings.saving || 
+  const saving =
+    generalSettings.saving ||
+    notificationSettings.saving ||
     roleSettings.saving;
 
-  // Función para guardar todo
   const handleSaveAll = async () => {
-    const results = await Promise.all([
-      generalSettings.save(),
-      notificationSettings.save(),
-      roleSettings.save()
-    ]);
-    
-    return results.every(r => r === true);
+    // Solo se guarda lo que cambió: cada POST deja una entrada en el audit log.
+    const pending = [];
+    if (generalSettings.hasChanges) pending.push(generalSettings.save());
+    if (notificationSettings.hasChanges) pending.push(notificationSettings.save());
+    if (roleSettings.hasChanges) pending.push(roleSettings.save());
+
+    const results = await Promise.all(pending);
+    return results.every(result => result === true);
   };
 
-  // Función para resetear/descartar cambios
+  // Descartar ya no recarga la página: vuelve al último valor guardado.
   const handleReset = () => {
-    if (confirm('¿Estás seguro de descartar todos los cambios?')) {
-      window.location.reload();
-    }
+    generalSettings.discard();
+    notificationSettings.discard();
+    roleSettings.discard();
   };
 
   const getChannelName = (channelId) => {
@@ -66,7 +68,8 @@ export function XPSystemSettings({ guildId, config, channels, roles }) {
         hasChanges={hasChanges}
         saving={saving}
         onSave={handleSaveAll}
-        onReset={handleReset}
+        onDiscard={handleReset}
+        showReset={false}
         saveText="Guardar Toda la Configuración"
       />
 

@@ -54,7 +54,20 @@ router.post('/logout', (req, res) => {
     if (err) {
       return res.status(500).json({ error: 'Error al cerrar sesión' });
     }
-    res.json({ message: 'Sesión cerrada exitosamente' });
+
+    // req.logout solo desasocia al usuario: sin destroy la sesión seguía viva
+    // en Mongo y la cookie seguía siendo válida.
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        return res.status(500).json({ error: 'Error al cerrar sesión' });
+      }
+      res.clearCookie('connect.sid', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+      });
+      res.json({ message: 'Sesión cerrada exitosamente' });
+    });
   });
 });
 

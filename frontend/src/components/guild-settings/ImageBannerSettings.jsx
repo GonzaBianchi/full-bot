@@ -1,128 +1,98 @@
-import { useState, useEffect } from 'react';
+// frontend/src/components/guild-settings/ImageBannerSettings.jsx
+import { useEffect, useState } from 'react';
 import { Image, Upload, X, Eye, EyeOff, Sliders } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import { imageService, getApiError } from '../../services/api';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+
+const defaultsFor = (type) => ({
+  url: '',
+  blur: type === 'rank-card' ? 8 : 6,
+  opacity: type === 'rank-card' ? 0.5 : 0.7
+});
 
 export function ImageBannerSettings({ guildId, type = 'achievement-notification' }) {
-  const [config, setConfig] = useState({
-    url: '',
-    blur: type === 'rank-card' ? 8 : 6,
-    opacity: type === 'rank-card' ? 0.5 : 0.7
+  // Las dos instancias (rank card y notificación de logros) leen del mismo
+  // endpoint: con react-query comparten una sola petición en vez de pedirlo
+  // cada una por su lado con `fetch`, que además se saltaba los interceptores.
+  const queryClient = useQueryClient();
+  const imagesKey = ['guild', guildId, 'images'];
+
+  const { data: images, isPending: loading } = useQuery({
+    queryKey: imagesKey,
+    queryFn: async () => (await imageService.getConfig(guildId)).data.images,
+    enabled: Boolean(guildId),
+    staleTime: 60 * 1000
   });
-  const [loading, setLoading] = useState(true);
+
+  const saved = (type === 'rank-card' ? images?.rankCard : images?.achievementNotification)
+    ?? defaultsFor(type);
+
+  const [config, setConfig] = useState(defaultsFor(type));
+  const [tempUrl, setTempUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(false);
-  const [tempUrl, setTempUrl] = useState('');
-
-  const API_URL = import.meta.env?.VITE_API_URL ?? '';
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   useEffect(() => {
-    loadConfig();
-  }, [guildId, type]);
+    setConfig({
+      url: saved.url || '',
+      blur: saved.blur ?? defaultsFor(type).blur,
+      opacity: saved.opacity ?? defaultsFor(type).opacity
+    });
+    setTempUrl(saved.url || '');
+  }, [saved.url, saved.blur, saved.opacity, type]);
 
-  const loadConfig = async () => {
+  const isValidUrl = (value) => {
     try {
-      setLoading(true);
-      const response = await fetch(
-        `${API_URL}/api/guilds/${guildId}/config/images`,
-        { credentials: 'include' }
-      );
-      
-      if (!response.ok) throw new Error('Error cargando configuración');
-      
-      const data = await response.json();
-      const imageConfig = type === 'rank-card' 
-        ? data.images?.rankCard 
-        : data.images?.achievementNotification;
-
-      if (imageConfig) {
-        setConfig({
-          url: imageConfig.url || '',
-          blur: imageConfig.blur ?? (type === 'rank-card' ? 8 : 6),
-          opacity: imageConfig.opacity ?? (type === 'rank-card' ? 0.5 : 0.7)
-        });
-        setTempUrl(imageConfig.url || '');
-      }
-    } catch (error) {
-      console.error('Error cargando configuración de imagen:', error);
-    } finally {
-      setLoading(false);
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
     }
   };
 
   const handleSave = async () => {
+    if (tempUrl && !isValidUrl(tempUrl)) {
+      toast.error('Ingresá una URL válida (http o https)');
+      return;
+    }
+
+    setSaving(true);
     try {
-      setSaving(true);
-      
-      if (tempUrl && !isValidUrl(tempUrl)) {
-        alert('Por favor ingresa una URL válida');
-        return;
+      const payload = { url: tempUrl || null, blur: config.blur, opacity: config.opacity };
+      if (type === 'rank-card') {
+        await imageService.updateRankCard(guildId, payload);
+      } else {
+        await imageService.updateAchievementNotification(guildId, payload);
       }
 
-      const response = await fetch(
-        `${API_URL}/api/guilds/${guildId}/config/images/${type}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            url: tempUrl || null,
-            blur: config.blur,
-            opacity: config.opacity
-          })
-        }
-      );
-
-      if (!response.ok) throw new Error('Error guardando configuración');
-
       setConfig(prev => ({ ...prev, url: tempUrl }));
-      alert('✅ Configuración guardada exitosamente');
+      await queryClient.invalidateQueries({ queryKey: imagesKey });
+      toast.success('✅ Configuración guardada');
     } catch (error) {
-      console.error('Error guardando configuración:', error);
-      alert('❌ Error al guardar la configuración');
+      console.error('Error guardando configuración de imagen:', error);
+      toast.error(getApiError(error, 'Error al guardar la configuración'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleReset = async () => {
-    if (!confirm('¿Resetear la configuración de imagen a los valores por defecto?')) {
-      return;
-    }
-
+    setConfirmingReset(false);
+    setSaving(true);
     try {
-      setSaving(true);
-      const response = await fetch(
-        `${API_URL}/api/guilds/${guildId}/config/images/${type}`,
-        {
-          method: 'DELETE',
-          credentials: 'include'
-        }
-      );
-
-      if (!response.ok) throw new Error('Error reseteando configuración');
-
-      const defaults = {
-        url: '',
-        blur: type === 'rank-card' ? 8 : 6,
-        opacity: type === 'rank-card' ? 0.5 : 0.7
-      };
-      
-      setConfig(defaults);
+      await imageService.resetImage(guildId, type);
+      setConfig(defaultsFor(type));
       setTempUrl('');
-      alert('✅ Configuración reseteada');
+      await queryClient.invalidateQueries({ queryKey: imagesKey });
+      toast.success('✅ Configuración reseteada');
     } catch (error) {
-      console.error('Error reseteando configuración:', error);
-      alert('❌ Error al resetear');
+      console.error('Error reseteando configuración de imagen:', error);
+      toast.error(getApiError(error, 'Error al resetear'));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const isValidUrl = (string) => {
-    try {
-      const url = new URL(string);
-      return url.protocol === 'http:' || url.protocol === 'https:';
-    } catch (_) {
-      return false;
     }
   };
 
@@ -141,6 +111,16 @@ export function ImageBannerSettings({ guildId, type = 'achievement-notification'
 
   return (
     <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50">
+      <ConfirmDialog
+        open={confirmingReset}
+        danger
+        title="Restablecer la imagen"
+        description="Vuelve al fondo por defecto de esta tarjeta. Esta acción no se puede deshacer."
+        confirmText="Restablecer"
+        onConfirm={handleReset}
+        onCancel={() => setConfirmingReset(false)}
+      />
+
       <div className="flex items-center gap-3 mb-6">
         <Image className="w-6 h-6 text-indigo-400" />
         <div>
@@ -269,7 +249,7 @@ export function ImageBannerSettings({ guildId, type = 'achievement-notification'
             {saving ? 'Guardando...' : '💾 Guardar Cambios'}
           </button>
           <button
-            onClick={handleReset}
+            onClick={() => setConfirmingReset(true)}
             disabled={saving}
             className="px-6 py-3 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-white rounded-lg font-medium transition-colors"
           >

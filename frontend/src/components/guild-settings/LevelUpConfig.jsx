@@ -1,4 +1,6 @@
 // frontend/src/components/guild-settings/LevelUpConfig.jsx
+const MAX_MESSAGE_LENGTH = 500;
+
 export function LevelUpConfig({ 
   enabled, 
   setEnabled, 
@@ -8,6 +10,10 @@ export function LevelUpConfig({
   setMessage, 
   channels 
 }) {
+  const trimmedMessage = message.trim();
+  const messageError = trimmedMessage.length === 0 ? 'El mensaje no puede quedar vacío' : null;
+  const nearLimit = message.length > MAX_MESSAGE_LENGTH * 0.9;
+
   const messageTags = [
     { key: '{mention}', desc: 'Menciona al usuario' },
     { key: '{username}', desc: 'Nombre del usuario' },
@@ -76,9 +82,26 @@ export function LevelUpConfig({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={3}
-            className="w-full px-4 py-3 bg-gray-700/50 border-2 border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none transition-all"
+            maxLength={MAX_MESSAGE_LENGTH}
+            aria-invalid={Boolean(messageError)}
+            aria-describedby="levelup-message-help"
+            className={`w-full px-4 py-3 bg-gray-700/50 border-2 rounded-lg text-white focus:outline-none focus:ring-2 resize-none transition-all ${
+              messageError
+                ? 'border-red-500/70 focus:ring-red-500'
+                : 'border-gray-600 focus:ring-indigo-500 focus:border-transparent'
+            }`}
             placeholder="🎉 {mention} ha subido al nivel {level}!"
           />
+          {/* El backend rechaza mensajes vacíos o de más de 500 caracteres:
+              conviene avisarlo acá y no con un 400 al guardar. */}
+          <div id="levelup-message-help" className="flex justify-between gap-3 mt-1.5 text-xs">
+            <span className={messageError ? 'text-red-400' : 'text-gray-500'}>
+              {messageError ?? 'Se admiten hasta 500 caracteres'}
+            </span>
+            <span className={`tabular-nums ${nearLimit ? 'text-yellow-400' : 'text-gray-500'}`}>
+              {message.length}/{MAX_MESSAGE_LENGTH}
+            </span>
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {messageTags.map(tag => (
               <span key={tag.key} className="text-xs px-3 py-1.5 bg-gray-700 text-gray-300 rounded-lg border border-gray-600">

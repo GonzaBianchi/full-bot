@@ -12,14 +12,13 @@ const AchievementTierSchema = new mongoose.Schema({
 
 // Esquema principal de logros configurables
 const AchievementSchema = new mongoose.Schema({
-  guildId: { type: String, required: true, index: true },
+  guildId: { type: String, required: true },
   
   // Tipo de logro
   type: {
     type: String,
     required: true,
-    enum: ['messages', 'reactions', 'reactions_given', 'voice_time', 'boost'],
-    index: true
+    enum: ['messages', 'reactions', 'reactions_given', 'voice_time', 'boost']
   },
   
   // Información básica

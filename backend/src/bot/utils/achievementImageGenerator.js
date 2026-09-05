@@ -1,6 +1,7 @@
 // backend/src/bot/utils/achievementImageGenerator.js
-import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
-import logger from '../../utils/logger.js';
+import { createCanvas } from '@napi-rs/canvas';
+import { loadRemoteImage } from '../../utils/remoteImageCache.js';
+import { formatTarget } from '../../utils/achievementFormat.js';
 
 const TIER_COLORS = [
   '#CD7F32', // Bronce - Tier 1
@@ -13,57 +14,20 @@ const TIER_COLORS = [
 ];
 
 /**
- * Formatea el objetivo según el tipo de logro
+ * Convierte un emoji en imagen usando el CDN de twemoji.
+ * Pasa por la caché de imágenes remotas: antes se descargaba en cada tarjeta,
+ * dos veces (icono del logro y emoji del tier).
  */
-function formatTarget(type, target) {
-  switch (type) {
-    case 'messages':
-      return `${target.toLocaleString()} mensajes`;
-    case 'reactions':
-      return `${target.toLocaleString()} reacciones recibidas`;
-    case 'reactions_given':
-      return `${target.toLocaleString()} reacciones dadas`;
-    case 'voice_time':
-      const hours = Math.floor(target / 3600);
-      const minutes = Math.floor((target % 3600) / 60);
-      if (hours > 0) {
-        return `${hours}h ${minutes}m en voz`;
-      }
-      return `${minutes}m en voz`;
-    case 'boost':
-      return 'Boostear el servidor';
-    default:
-      return `${target.toLocaleString()}`;
-  }
-}
-
-/**
- * Convierte emoji a imagen usando una API
- */
-async function getEmojiImage(emoji) {
-  try {
-    // Usar twemoji CDN para obtener imágenes de emojis
-    const codePoint = emoji.codePointAt(0).toString(16);
-    const url = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/${codePoint}.png`;
-    
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error('Emoji no encontrado');
-    }
-    
-    const arrayBuffer = await response.arrayBuffer();
-    return await loadImage(Buffer.from(arrayBuffer));
-  } catch (error) {
-    logger.warn(`No se pudo cargar emoji ${emoji}:`, error.message);
-    return null;
-  }
+function getEmojiImage(emoji) {
+  if (!emoji) return Promise.resolve(null);
+  const codePoint = emoji.codePointAt(0).toString(16);
+  return loadRemoteImage(`https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/${codePoint}.png`);
 }
 
 /**
  * Genera una imagen de notificación cuando se desbloquea un logro
  */
 export async function generateAchievementNotification({
-  user,
   achievement,
   tier,
   imageUrl = null,
@@ -76,16 +40,7 @@ export async function generateAchievementNotification({
   const ctx = canvas.getContext('2d');
 
   // --- FONDO ---
-  let backgroundImage = null;
-  if (imageUrl) {
-    try {
-      const response = await fetch(imageUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      backgroundImage = await loadImage(Buffer.from(arrayBuffer));
-    } catch (error) {
-      logger.warn('No se pudo cargar imagen de logro personalizada');
-    }
-  }
+  const backgroundImage = await loadRemoteImage(imageUrl);
 
   if (backgroundImage) {
     // Aplicar blur

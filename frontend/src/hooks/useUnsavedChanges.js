@@ -1,32 +1,28 @@
 // frontend/src/hooks/useUnsavedChanges.js
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
+
+const snapshot = (value) => {
+  // `sort()` ordena in place: aplicado directamente sobre el estado de React
+  // mutaba el array que el componente estaba renderizando.
+  if (Array.isArray(value)) return JSON.stringify([...value].sort());
+  return JSON.stringify(value ?? null);
+};
 
 export function useUnsavedChanges(currentValue, initialValue) {
-  const [hasChanges, setHasChanges] = useState(false);
-
-  useEffect(() => {
-    // Comparación profunda para objetos y arrays
-    const areEqual = JSON.stringify(currentValue) === JSON.stringify(initialValue);
-    setHasChanges(!areEqual);
-  }, [currentValue, initialValue]);
-
-  return hasChanges;
+  return useMemo(
+    () => JSON.stringify(currentValue) !== JSON.stringify(initialValue),
+    [currentValue, initialValue]
+  );
 }
 
-// Hook específico para múltiples valores
+/** Igual que el anterior pero para varios pares valor/original a la vez. */
 export function useMultipleUnsavedChanges(values) {
-  const [hasChanges, setHasChanges] = useState(false);
+  const key = JSON.stringify(
+    values.map(({ current, original }) => [snapshot(current), snapshot(original)])
+  );
 
-  useEffect(() => {
-    const anyChanged = values.some(({ current, original }) => {
-      if (Array.isArray(current)) {
-        return JSON.stringify(current.sort()) !== JSON.stringify(original.sort());
-      }
-      return current !== original;
-    });
-    
-    setHasChanges(anyChanged);
-  }, [values]);
-
-  return hasChanges;
+  return useMemo(() => {
+    const pairs = JSON.parse(key);
+    return pairs.some(([current, original]) => current !== original);
+  }, [key]);
 }

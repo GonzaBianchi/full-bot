@@ -1,11 +1,12 @@
 // backend/src/bot/commands/rank.js
-import { SlashCommandBuilder, AttachmentBuilder } from 'discord.js';
+import { SlashCommandBuilder, AttachmentBuilder, MessageFlags } from 'discord.js';
 import User from '../../models/User.js';
-import Guild from '../../models/Guild.js';
 import { xpForLevel } from '../utils/levelSystem.js';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import logger from '../../utils/logger.js';
 import { getRankCard, setRankCard } from '../../utils/rankCardCache.js';
+import { loadRemoteImage } from '../../utils/remoteImageCache.js';
+import { getGuildConfig } from '../../utils/guildConfigCache.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -16,7 +17,7 @@ export default {
   async execute(interaction) {
     try {
       // Defer reply inmediatamente para evitar timeout
-      await interaction.deferReply({ ephemeral: false }).catch(err => {
+      await interaction.deferReply().catch(err => {
         logger.error('Error en deferReply:', err);
         throw err;
       });
@@ -30,10 +31,20 @@ export default {
         });
       }
 
+      // La caché se consulta ANTES de ir a la BD: antes se hacía la consulta
+      // igualmente, así que un acierto no ahorraba nada.
+      const cached = getRankCard(guildId, target.id);
+      if (cached) {
+        const attachment = new AttachmentBuilder(cached, { name: 'rank.png' });
+        return await interaction.editReply({ files: [attachment] });
+      }
+
       logger.info(`Generando rank card para ${target.id} en guild ${guildId}`);
 
-      // Buscar documento del usuario
-      const userDoc = await User.findOne({ guildId, userId: target.id }).lean();
+      const [userDoc, guildConfig] = await Promise.all([
+        User.findOne({ guildId, userId: target.id }).lean(),
+        getGuildConfig(guildId)
+      ]);
 
       if (!userDoc) {
         return await interaction.editReply({
@@ -41,15 +52,6 @@ export default {
         });
       }
 
-      // Servir desde caché si está disponible
-      const cached = getRankCard(guildId, target.id);
-      if (cached) {
-        const attachment = new AttachmentBuilder(cached, { name: 'rank.png' });
-        return await interaction.editReply({ files: [attachment] });
-      }
-
-      // Buscar configuración de imagen del guild
-      const guildConfig = await Guild.findOne({ guildId }).lean();
       const imageConfig = guildConfig?.images?.rankCard || {
         url: null,
         blur: 8,
@@ -61,7 +63,6 @@ export default {
       // Asegurar que los valores numéricos sean válidos
       const level = Number(userDoc.level) || 0;
       const totalXp = Number(userDoc.totalXp) || 0;
-      const messageCount = Number(userDoc.messageCount) || 0;
 
       // Calcular progreso
       let currentLevelTotal = 0;
@@ -98,22 +99,8 @@ export default {
       const ctx = canvas.getContext('2d');
 
       // --- FONDO CON IMAGEN PERSONALIZADA ---
-      let backgroundImage = null;
-      
-      // Intentar cargar imagen personalizada
-      if (imageConfig.url) {
-        try {
-          logger.info(`Cargando imagen personalizada: ${imageConfig.url}`);
-          const response = await fetch(imageConfig.url);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const arrayBuffer = await response.arrayBuffer();
-          backgroundImage = await loadImage(Buffer.from(arrayBuffer));
-          logger.info('✅ Imagen personalizada cargada correctamente');
-        } catch (error) {
-          logger.warn(`No se pudo cargar imagen personalizada: ${error.message}. Usando fondo por defecto.`);
-          backgroundImage = null;
-        }
-      }
+      // La imagen se descarga y decodifica una vez por URL, no en cada render.
+      const backgroundImage = await loadRemoteImage(imageConfig.url);
 
       if (backgroundImage) {
         // Aplicar blur configurado
@@ -266,7 +253,7 @@ export default {
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply({ content: errorMessage });
         } else {
-          await interaction.reply({ content: errorMessage, ephemeral: true });
+          await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
         }
       } catch (replyError) {
         logger.error('Error al responder con mensaje de error:', replyError);

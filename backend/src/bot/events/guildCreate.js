@@ -1,6 +1,8 @@
 import { Events, ActivityType } from 'discord.js';
+import { dashboardUrl } from '../../utils/urls.js';
 import Guild from '../../models/Guild.js';
 import logger from '../../utils/logger.js';
+import { invalidateGuildConfig } from '../../utils/guildConfigCache.js';
 
 export default {
   name: Events.GuildCreate,
@@ -8,25 +10,14 @@ export default {
     logger.info(`📥 Bot añadido al servidor: ${guild.name} (${guild.id})`);
 
     try {
-      // Crear configuración del servidor si no existe
-      let guildConfig = await Guild.findOne({ guildId: guild.id });
-
-      if (!guildConfig) {
-        guildConfig = await Guild.create({
-          guildId: guild.id,
-          name: guild.name,
-          icon: guild.iconURL(),
-          ownerId: guild.ownerId,
-        });
-
-        logger.info(`✅ Configuración creada para ${guild.name}`);
-      } else {
-        // Actualizar información del servidor
-        guildConfig.name = guild.name;
-        guildConfig.icon = guild.iconURL();
-        guildConfig.ownerId = guild.ownerId;
-        await guildConfig.save();
-      }
+      // Un solo upsert atómico en vez de findOne + create/save.
+      await Guild.updateOne(
+        { guildId: guild.id },
+        { $set: { name: guild.name, icon: guild.iconURL(), ownerId: guild.ownerId } },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
+      invalidateGuildConfig(guild.id);
+      logger.info(`✅ Configuración lista para ${guild.name}`);
 
       // Intentar enviar mensaje de bienvenida
       try {
@@ -37,7 +28,7 @@ export default {
               `🎮 Usa \`/rank\` para ver tu nivel y XP\n` +
               `📊 Usa \`/leaderboard\` para ver el ranking del servidor\n` +
               `⚙️ Los administradores pueden configurar el bot desde el dashboard\n\n` +
-              `Dashboard: ${process.env.FRONTEND_URL || 'https://tuapp.com'}`
+              `Dashboard: ${dashboardUrl()}`
           });
         }
       } catch (err) {

@@ -1,12 +1,15 @@
 // frontend/src/components/guild-settings/BirthdaySettings.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Cake, AlertCircle, Hash, Users } from 'lucide-react';
 import { StickyActionBar } from '../ui/StickyActionBar';
 import { StyledSelect } from '../ui/StyledSelect';
 import { SectionCard } from '../ui/SectionCard';
 import { InfoAlert } from '../ui/InfoAlert';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import toast from 'react-hot-toast';
-import api from '../../services/api';
+import { birthdayService, getApiError } from '../../services/api';
+import { useGuildSettings } from '../../hooks/useGuildSettings';
+import { useGuildInvalidation } from '../../hooks/queries';
 
 // ========== Configuración por defecto ==========
 const DEFAULT_SETTINGS = {
@@ -18,45 +21,19 @@ const DEFAULT_SETTINGS = {
   embedColor: '#FF69B4'
 };
 
-export function BirthdaySettings({ guildId, config, channels, roles }) {
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [originalSettings, setOriginalSettings] = useState(null);
+export function BirthdaySettings() {
+  // El bloque `birthdays` ya viene en `GET /config`: este componente pedía la
+  // misma información otra vez en cada montaje de la pestaña.
+  const {
+    guildId,
+    channels,
+    roles,
+    birthdays: { draft: settings, setDraft: setSettings, hasChanges, markSaved, discard }
+  } = useGuildSettings();
+
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadSettings();
-  }, [guildId]);
-
-  const loadSettings = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get(`/api/guilds/${guildId}/config/birthdays`);
-      
-      const birthdayConfig = response.data?.birthdays || DEFAULT_SETTINGS;
-      
-      const validatedConfig = {
-        enabled: birthdayConfig.enabled ?? DEFAULT_SETTINGS.enabled,
-        channelId: birthdayConfig.channelId ?? DEFAULT_SETTINGS.channelId,
-        message: birthdayConfig.message || DEFAULT_SETTINGS.message,
-        mentionRole: birthdayConfig.mentionRole ?? DEFAULT_SETTINGS.mentionRole,
-        embedEnabled: birthdayConfig.embedEnabled ?? DEFAULT_SETTINGS.embedEnabled,
-        embedColor: birthdayConfig.embedColor || DEFAULT_SETTINGS.embedColor
-      };
-      
-      setSettings(validatedConfig);
-      setOriginalSettings(validatedConfig);
-    } catch (error) {
-      console.error('Error loading birthday settings:', error);
-      toast.error('Error al cargar configuración de cumpleaños');
-      setSettings(DEFAULT_SETTINGS);
-      setOriginalSettings(DEFAULT_SETTINGS);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const { invalidateConfig } = useGuildInvalidation(guildId);
 
   const handleSave = async () => {
     if (settings.enabled && !settings.channelId) {
@@ -66,88 +43,33 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
 
     setSaving(true);
     try {
-      const response = await api.post(`/api/guilds/${guildId}/config/birthdays`, settings);
-      
-      if (response.data && response.data.birthdays) {
-        const updatedConfig = {
-          enabled: response.data.birthdays.enabled ?? settings.enabled,
-          channelId: response.data.birthdays.channelId ?? settings.channelId,
-          message: response.data.birthdays.message || settings.message,
-          mentionRole: response.data.birthdays.mentionRole ?? settings.mentionRole,
-          embedEnabled: response.data.birthdays.embedEnabled ?? settings.embedEnabled,
-          embedColor: response.data.birthdays.embedColor || settings.embedColor
-        };
-        
-        setSettings(updatedConfig);
-        setOriginalSettings(updatedConfig);
-        toast.success('✅ Configuración de cumpleaños guardada');
-      } else {
-        setOriginalSettings(settings);
-        toast.success('✅ Configuración guardada');
-      }
+      const { data } = await birthdayService.update(guildId, settings);
+      markSaved(data?.birthdays ?? settings);
+      await invalidateConfig();
+      toast.success('✅ Configuración de cumpleaños guardada');
     } catch (error) {
       console.error('Error saving birthday settings:', error);
-      const errorMsg = error.response?.data?.error || 'Error al guardar configuración';
-      toast.error(errorMsg);
+      toast.error(getApiError(error, 'Error al guardar configuración'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleReset = async () => {
-    if (!confirm('¿Estás seguro de resetear la configuración de cumpleaños?')) return;
-    
+    setConfirmingReset(false);
     setSaving(true);
     try {
-      const response = await api.delete(`/api/guilds/${guildId}/config/birthdays`);
-      
-      if (response.data && response.data.birthdays) {
-        const resetConfig = {
-          enabled: response.data.birthdays.enabled ?? DEFAULT_SETTINGS.enabled,
-          channelId: response.data.birthdays.channelId ?? DEFAULT_SETTINGS.channelId,
-          message: response.data.birthdays.message || DEFAULT_SETTINGS.message,
-          mentionRole: response.data.birthdays.mentionRole ?? DEFAULT_SETTINGS.mentionRole,
-          embedEnabled: response.data.birthdays.embedEnabled ?? DEFAULT_SETTINGS.embedEnabled,
-          embedColor: response.data.birthdays.embedColor || DEFAULT_SETTINGS.embedColor
-        };
-        
-        setSettings(resetConfig);
-        setOriginalSettings(resetConfig);
-      } else {
-        setSettings(DEFAULT_SETTINGS);
-        setOriginalSettings(DEFAULT_SETTINGS);
-      }
-      
+      const { data } = await birthdayService.reset(guildId);
+      markSaved(data?.birthdays ?? DEFAULT_SETTINGS);
+      await invalidateConfig();
       toast.success('✅ Configuración reseteada');
     } catch (error) {
       console.error('Error resetting birthday settings:', error);
-      toast.error('Error al resetear configuración');
+      toast.error(getApiError(error, 'Error al resetear configuración'));
     } finally {
       setSaving(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white flex items-center space-x-3">
-              <Cake className="w-8 h-8 text-pink-400" />
-              <span>Cumpleaños</span>
-            </h2>
-            <p className="text-gray-400 mt-1">
-              Celebra automáticamente los cumpleaños de los miembros
-            </p>
-          </div>
-        </div>
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-500 mx-auto"></div>
-          <p className="text-gray-400 mt-4">Cargando configuración...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Preparar opciones para los selects
   const channelOptions = channels.map(ch => ({ id: ch.id, name: `# ${ch.name}` }));
@@ -165,8 +87,20 @@ export function BirthdaySettings({ guildId, config, channels, roles }) {
         hasChanges={hasChanges}
         saving={saving}
         onSave={handleSave}
-        onReset={handleReset}
+        onReset={() => setConfirmingReset(true)}
+        onDiscard={discard}
+        resetText="Valores por defecto"
         saveText="Guardar Configuración"
+      />
+
+      <ConfirmDialog
+        open={confirmingReset}
+        danger
+        title="Restablecer los cumpleaños"
+        description="Se borra la configuración guardada y vuelve a los valores por defecto. Esta acción no se puede deshacer."
+        confirmText="Restablecer"
+        onConfirm={handleReset}
+        onCancel={() => setConfirmingReset(false)}
       />
 
       {/* Header */}

@@ -4,8 +4,12 @@ import { Trophy, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Award, Bell, Hash
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ImageBannerSettings } from './ImageBannerSettings';
 import { GlobalAchievementsConfig } from './GlobalAchievementsConfig';
+import { useGuildSettings } from '../../hooks/useGuildSettings';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import toast from 'react-hot-toast';
 
-export function AchievementsSettings({ guildId, roles, channels }) {
+export function AchievementsSettings() {
+  const { guildId, roles, channels } = useGuildSettings();
   const {
     achievements,
     loading,
@@ -19,6 +23,8 @@ export function AchievementsSettings({ guildId, roles, channels }) {
 
   const [showModal, setShowModal] = useState(false);
   const [editingAchievement, setEditingAchievement] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [confirmingDefaults, setConfirmingDefaults] = useState(false);
 
   const achievementTypes = [
     { value: 'messages', label: '💬 Mensajes', description: 'Cantidad de mensajes enviados' },
@@ -28,22 +34,23 @@ export function AchievementsSettings({ guildId, roles, channels }) {
   ];
 
   const handleCreateDefault = async () => {
-    if (window.confirm('¿Crear logros predeterminados? (Solo si no tienes ninguno)')) {
-      try {
-        await createDefaultAchievements();
-      } catch (error) {
-        // Error ya manejado por el hook
-      }
+    setConfirmingDefaults(false);
+    try {
+      await createDefaultAchievements();
+    } catch {
+      // El hook ya avisó al usuario
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`¿Eliminar el logro "${name}"?`)) {
-      try {
-        await deleteAchievement(id);
-      } catch (error) {
-        // Error ya manejado
-      }
+  const handleDelete = async () => {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target) return;
+
+    try {
+      await deleteAchievement(target.id);
+    } catch {
+      // El hook ya avisó al usuario
     }
   };
 
@@ -67,6 +74,25 @@ export function AchievementsSettings({ guildId, roles, channels }) {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        danger
+        title="Eliminar el logro"
+        description={pendingDelete ? `Se elimina "${pendingDelete.name}" y el progreso de los miembros. Esta acción no se puede deshacer.` : ''}
+        confirmText="Eliminar"
+        onConfirm={handleDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmingDefaults}
+        title="Crear los logros predeterminados"
+        description="Se agregan los logros base del bot. Hacelo solo si el servidor todavía no tiene logros propios."
+        confirmText="Crear"
+        onConfirm={handleCreateDefault}
+        onCancel={() => setConfirmingDefaults(false)}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -80,7 +106,7 @@ export function AchievementsSettings({ guildId, roles, channels }) {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={handleCreateDefault}
+            onClick={() => setConfirmingDefaults(true)}
             disabled={achievements.length > 0 || saving}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2"
           >
@@ -107,7 +133,7 @@ export function AchievementsSettings({ guildId, roles, channels }) {
           <Trophy className="w-16 h-16 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-400 text-lg mb-4">No hay logros configurados</p>
           <button
-            onClick={handleCreateDefault}
+            onClick={() => setConfirmingDefaults(true)}
             className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
           >
             Crear Logros Predeterminados
@@ -121,9 +147,8 @@ export function AchievementsSettings({ guildId, roles, channels }) {
               achievement={achievement}
               typeInfo={getTypeInfo(achievement.type)}
               onEdit={() => handleEdit(achievement)}
-              onDelete={() => handleDelete(achievement._id, achievement.name)}
+              onDelete={() => setPendingDelete({ id: achievement._id, name: achievement.name })}
               onToggle={() => toggleAchievement(achievement._id)}
-              roles={roles}
               channels={channels}
             />
           ))}
@@ -139,7 +164,6 @@ export function AchievementsSettings({ guildId, roles, channels }) {
       {showModal && (
         <AchievementModal
           achievement={editingAchievement}
-          guildId={guildId}
           roles={roles}
           channels={channels}
           achievementTypes={achievementTypes}
@@ -156,7 +180,7 @@ export function AchievementsSettings({ guildId, roles, channels }) {
 }
 
 // Componente individual de logro
-function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, roles, channels }) {
+function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, channels }) {
   const [expanded, setExpanded] = useState(false);
 
   const getChannelName = (channelId) => {
@@ -267,7 +291,7 @@ function AchievementCard({ achievement, typeInfo, onEdit, onDelete, onToggle, ro
 }
 
 // Modal de creación/edición
-function AchievementModal({ achievement, guildId, roles, channels, achievementTypes, onClose, onCreate, onUpdate }) {
+function AchievementModal({ achievement, roles, channels, achievementTypes, onClose, onCreate, onUpdate }) {
   const isEditing = !!achievement;
 
   const [formData, setFormData] = useState({
@@ -291,28 +315,28 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
     e.preventDefault();
     
     if (!formData.name.trim()) {
-      alert('El nombre es requerido');
+      toast.error('El nombre es requerido');
       return;
     }
 
     if (formData.tiers.length === 0) {
-      alert('Debes agregar al menos un tier');
+      toast.error('Debes agregar al menos un tier');
       return;
     }
 
     for (const tier of formData.tiers) {
       if (!tier.title.trim()) {
-        alert(`El tier ${tier.tier} necesita un título`);
+        toast.error(`El tier ${tier.tier} necesita un título`);
         return;
       }
       if (!tier.target || tier.target < 1) {
-        alert(`El tier ${tier.tier} necesita un target válido`);
+        toast.error(`El tier ${tier.tier} necesita un target válido`);
         return;
       }
     }
 
     if (formData.type === 'boost' && !formData.boostRoleId) {
-      alert('Los logros de tipo Boost requieren seleccionar el rol de booster');
+      toast.error('Los logros de tipo Boost requieren seleccionar el rol de booster');
       return;
     }
 
@@ -374,7 +398,7 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
 
   const removeTier = (index) => {
     if (formData.tiers.length === 1) {
-      alert('Debe haber al menos un tier');
+      toast.error('Debe haber al menos un tier');
       return;
     }
     
@@ -748,10 +772,11 @@ function AchievementModal({ achievement, guildId, roles, channels, achievementTy
 // Helper para formatear targets según el tipo
 function formatTarget(target, type) {
   switch (type) {
-    case 'voice_time':
+    case 'voice_time': {
       const hours = Math.floor(target / 3600);
       const minutes = Math.floor((target % 3600) / 60);
       return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+    }
     case 'boost':
       return 'Boostear';
     default:

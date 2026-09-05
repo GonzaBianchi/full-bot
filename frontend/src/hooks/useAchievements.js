@@ -1,112 +1,83 @@
-import { useState, useEffect } from 'react';
-import api from '../services/api';
+// frontend/src/hooks/useAchievements.js
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import api, { getApiError } from '../services/api';
 import toast from 'react-hot-toast';
+import { queryKeys } from './queries';
 
 export function useAchievements(guildId) {
-  const [achievements, setAchievements] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (guildId) {
-      loadAchievements();
-    }
-  }, [guildId]);
+  const { data: achievements = [], isPending: loading } = useQuery({
+    queryKey: queryKeys.achievements(guildId),
+    queryFn: async () =>
+      (await api.get(`/api/guilds/${guildId}/config/achievements`)).data.achievements ?? [],
+    enabled: Boolean(guildId)
+  });
 
-  const loadAchievements = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get(`/api/guilds/${guildId}/config/achievements`);
-      setAchievements(response.data.achievements);
-    } catch (error) {
-      console.error('Error loading achievements:', error);
-      toast.error('Error al cargar logros');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.achievements(guildId) });
 
-  const createAchievement = async (data) => {
+  /** Envuelve una mutación: estado de guardado, aviso de error e invalidación. */
+  const mutate = async (action, { errorMessage, successMessage }) => {
+    setSaving(true);
     try {
-      setSaving(true);
-      const response = await api.post(`/api/guilds/${guildId}/config/achievements`, data);
-      setAchievements([...achievements, response.data.achievement]);
-      toast.success('✅ Logro creado correctamente');
-      return response.data.achievement;
+      const result = await action();
+      await invalidate();
+      if (successMessage) toast.success(successMessage);
+      return result;
     } catch (error) {
-      console.error('Error creating achievement:', error);
-      toast.error(error.response?.data?.error || 'Error al crear logro');
+      console.error(errorMessage, error);
+      toast.error(getApiError(error, errorMessage));
       throw error;
     } finally {
       setSaving(false);
     }
   };
 
-  const updateAchievement = async (id, data) => {
-    try {
-      setSaving(true);
-      const response = await api.put(`/api/guilds/${guildId}/config/achievements/${id}`, data);
-      setAchievements(achievements.map(a => a._id === id ? response.data.achievement : a));
-      toast.success('✅ Logro actualizado correctamente');
-      return response.data.achievement;
-    } catch (error) {
-      console.error('Error updating achievement:', error);
-      toast.error('Error al actualizar logro');
-      throw error;
-    } finally {
-      setSaving(false);
-    }
-  };
+  const createAchievement = (data) =>
+    mutate(
+      async () => (await api.post(`/api/guilds/${guildId}/config/achievements`, data)).data.achievement,
+      { errorMessage: 'Error al crear logro', successMessage: '✅ Logro creado correctamente' }
+    );
 
-  const deleteAchievement = async (id) => {
-    try {
-      setSaving(true);
-      await api.delete(`/api/guilds/${guildId}/config/achievements/${id}`);
-      setAchievements(achievements.filter(a => a._id !== id));
-      toast.success('🗑️ Logro eliminado correctamente');
-    } catch (error) {
-      console.error('Error deleting achievement:', error);
-      toast.error('Error al eliminar logro');
-      throw error;
-    } finally {
-      setSaving(false);
-    }
-  };
+  const updateAchievement = (id, data) =>
+    mutate(
+      async () => (await api.put(`/api/guilds/${guildId}/config/achievements/${id}`, data)).data.achievement,
+      { errorMessage: 'Error al actualizar logro', successMessage: '✅ Logro actualizado correctamente' }
+    );
+
+  const deleteAchievement = (id) =>
+    mutate(
+      () => api.delete(`/api/guilds/${guildId}/config/achievements/${id}`),
+      { errorMessage: 'Error al eliminar logro', successMessage: '🗑️ Logro eliminado correctamente' }
+    );
 
   const toggleAchievement = async (id) => {
     try {
-      const response = await api.patch(`/api/guilds/${guildId}/config/achievements/${id}/toggle`);
-      setAchievements(achievements.map(a => a._id === id ? response.data.achievement : a));
-      toast.success(`Logro ${response.data.achievement.enabled ? 'habilitado' : 'deshabilitado'}`);
+      const { data } = await api.patch(`/api/guilds/${guildId}/config/achievements/${id}/toggle`);
+      await invalidate();
+      toast.success(`Logro ${data.achievement.enabled ? 'habilitado' : 'deshabilitado'}`);
     } catch (error) {
       console.error('Error toggling achievement:', error);
-      toast.error('Error al cambiar estado del logro');
+      toast.error(getApiError(error, 'Error al cambiar estado del logro'));
     }
   };
 
-  const createDefaultAchievements = async () => {
-    try {
-      setSaving(true);
-      const response = await api.post(`/api/guilds/${guildId}/config/achievements/default`);
-      setAchievements(response.data.achievements);
-      toast.success('✅ Logros predeterminados creados');
-      return response.data.achievements;
-    } catch (error) {
-      console.error('Error creating default achievements:', error);
-      toast.error(error.response?.data?.error || 'Error al crear logros predeterminados');
-      throw error;
-    } finally {
-      setSaving(false);
-    }
-  };
+  const createDefaultAchievements = () =>
+    mutate(
+      async () => (await api.post(`/api/guilds/${guildId}/config/achievements/default`)).data.achievements,
+      { errorMessage: 'Error al crear logros predeterminados', successMessage: '✅ Logros predeterminados creados' }
+    );
 
   const getAchievementStats = async (id) => {
     try {
-      const response = await api.get(`/api/guilds/${guildId}/config/achievements/${id}/stats`);
-      return response.data.stats;
+      const { data } = await api.get(`/api/guilds/${guildId}/config/achievements/${id}/stats`);
+      return data.stats;
     } catch (error) {
       console.error('Error getting achievement stats:', error);
-      toast.error('Error al obtener estadísticas');
+      toast.error(getApiError(error, 'Error al obtener estadísticas'));
       throw error;
     }
   };
@@ -115,7 +86,7 @@ export function useAchievements(guildId) {
     achievements,
     loading,
     saving,
-    loadAchievements,
+    loadAchievements: invalidate,
     createAchievement,
     updateAchievement,
     deleteAchievement,

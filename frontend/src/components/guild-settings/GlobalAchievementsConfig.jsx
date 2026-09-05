@@ -1,49 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Bell, Hash, Save } from 'lucide-react';
-import api from '../../services/api';
+import api, { getApiError } from '../../services/api';
 import toast from 'react-hot-toast';
+import { useGuildSettings } from '../../hooks/useGuildSettings';
+import { useDraft } from '../../hooks/useDraft';
+import { useGuildInvalidation } from '../../hooks/queries';
+
+const DEFAULT_CONFIG = {
+  notificationChannelId: '',
+  defaultMessage: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
+};
 
 export function GlobalAchievementsConfig({ guildId, channels }) {
-  const [config, setConfig] = useState({
-    notificationChannelId: '',
-    defaultMessage: '🎉 {mention} ha desbloqueado: **{achievement}** - {tier}!'
-  });
-  const [loading, setLoading] = useState(true);
+  // `achievementsConfig` viaja dentro de `GET /config`, así que no hace falta
+  // una petición aparte a `/config/achievements-global`.
+  const { config: guildConfig } = useGuildSettings();
+  const { draft: config, setDraft: setConfig, markSaved } = useDraft(
+    guildConfig?.achievementsConfig ?? DEFAULT_CONFIG
+  );
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    loadConfig();
-  }, [guildId]);
-
-  const loadConfig = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get(`/api/guilds/${guildId}/config/achievements-global`);
-      setConfig(response.data.config);
-    } catch (error) {
-      console.error('Error loading global achievements config:', error);
-      toast.error('Error al cargar configuración');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { invalidateConfig } = useGuildInvalidation(guildId);
 
   const handleSave = async () => {
     try {
       setSaving(true);
       await api.post(`/api/guilds/${guildId}/config/achievements-global`, config);
+      markSaved();
+      await invalidateConfig();
       toast.success('✅ Configuración global de logros guardada');
     } catch (error) {
       console.error('Error saving config:', error);
-      toast.error('Error al guardar configuración');
+      toast.error(getApiError(error, 'Error al guardar configuración'));
     } finally {
       setSaving(false);
     }
   };
-
-  if (loading) {
-    return <div className="text-gray-400">Cargando...</div>;
-  }
 
   return (
     <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50">

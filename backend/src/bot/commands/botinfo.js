@@ -1,4 +1,5 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { dashboardUrl } from '../../utils/urls.js';
 import logger from '../../utils/logger.js';
 
 export default {
@@ -10,7 +11,7 @@ export default {
     try {
       const client = interaction.client;
       const bot = client.user;
-      const developerId = '220625834627694592';
+      const developerId = process.env.BOT_DEVELOPER_ID || null;
 
       // Calcular estadísticas
       const guildCount = client.guilds.cache.size;
@@ -50,9 +51,9 @@ export default {
           },
           {
             name: '🔗 Enlaces',
-            value: `[Panel Web](${process.env.FRONTEND_URL || 'https://therifthavenfull.vercel.app'})\n` +
-                   `**Desarrollador:** <@${developerId}>\n` +
-                   `[Invitar Bot](https://discord.com/api/oauth2/authorize?client_id=${bot.id}&permissions=8&scope=bot%20applications.commands)`,
+            value: `[Panel Web](${dashboardUrl()})\n` +
+                   (developerId ? `**Desarrollador:** <@${developerId}>\n` : '') +
+                   `[Invitar Bot](https://discord.com/api/oauth2/authorize?client_id=${bot.id}&permissions=${process.env.BOT_INVITE_PERMISSIONS || '268823632'}&scope=bot%20applications.commands)`,
             inline: false
           },
           {
@@ -80,7 +81,7 @@ export default {
       logger.error('Error en comando botinfo:', error);
       await interaction.reply({
         content: '❌ Hubo un error al obtener la información del bot.',
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   }

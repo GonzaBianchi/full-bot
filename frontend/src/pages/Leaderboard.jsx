@@ -1,111 +1,116 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { leaderboardService, guildService, authService } from '../services/api';
-import { Trophy, Medal, Award, ArrowLeft, ChevronLeft, ChevronRight, Home } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { Trophy, Medal, Award, ArrowLeft, ChevronLeft, ChevronRight, Home, Search, X } from 'lucide-react';
+import { useLeaderboard, useGuildPublicInfo, useMe, useLeaderboardSearch } from '../hooks/queries';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { getApiError, loginUrl } from '../services/api';
+
+// Un evento por cada mensaje que da XP inundaría de refetches: se agrupan.
+const LIVE_REFRESH_MS = 3000;
+
+const getRankIcon = (rank) => {
+  if (rank === 1) return <Trophy className="w-5 h-5 text-yellow-400" />;
+  if (rank === 2) return <Medal className="w-5 h-5 text-gray-400" />;
+  if (rank === 3) return <Medal className="w-5 h-5 text-amber-600" />;
+  return <Award className="w-5 h-5 text-gray-500" />;
+};
+
+const getRankColor = (rank) => {
+  if (rank === 1) return 'text-yellow-400 bg-yellow-400/10';
+  if (rank === 2) return 'text-gray-400 bg-gray-400/10';
+  if (rank === 3) return 'text-amber-600 bg-amber-600/10';
+  return 'text-gray-400 bg-gray-700/30';
+};
+
+const getProgressPercentage = (user) => user.progress?.percent ?? 0;
 
 function Leaderboard() {
   const { guildId } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [pagination, setPagination] = useState(null);
-  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page')) || 1);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [guildInfo, setGuildInfo] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+
+  const currentPage = Math.max(1, parseInt(searchParams.get('page'), 10) || 1);
+
+  const { data, isPending, isPlaceholderData } = useLeaderboard(guildId, currentPage);
+  const { data: guildInfo } = useGuildPublicInfo(guildId);
+  const { data: user } = useMe();
+
+  const leaderboard = data?.leaderboard ?? [];
+  const pagination = data?.pagination ?? null;
+  const loading = isPending || isPlaceholderData;
+  const isAuthenticated = Boolean(user);
+
   const [liveUpdate, setLiveUpdate] = useState(false);
 
-  useEffect(() => {
-    authService.getMe()
-      .then(() => setIsAuthenticated(true))
-      .catch(() => setIsAuthenticated(false));
-  }, []);
+  // La búsqueda usa un endpoint que exige sesión y pertenencia al servidor.
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search.trim());
+  const isSearching = isAuthenticated && debouncedSearch.length >= 2;
+  const {
+    data: searchResults = [],
+    isPending: searchPending,
+    isFetching: searchFetching,
+    error: searchError
+  } = useLeaderboardSearch(guildId, debouncedSearch, isAuthenticated);
+  const searchLoading = isSearching && (searchPending || searchFetching);
+  const clearSearch = () => setSearch('');
+
+  // SSE: solo depende del servidor. Antes dependía también de la página, así
+  // que cada cambio de página cerraba y reabría la conexión.
+  const refreshTimer = useRef(null);
 
   useEffect(() => {
-    loadLeaderboard(currentPage);
-  }, [guildId, currentPage]);
+    if (!guildId) return;
 
-  // SSE: refrescar leaderboard en tiempo real cuando llegan actualizaciones
-  useEffect(() => {
     const url = `${import.meta.env.VITE_API_URL ?? ''}/api/leaderboard/public/${guildId}/events`;
-    const es = new EventSource(url);
+    const source = new EventSource(url);
 
-    es.onmessage = (e) => {
+    source.onmessage = (event) => {
+      let payload;
       try {
-        const msg = JSON.parse(e.data);
-        if (msg.event === 'connected') return;
-        setLiveUpdate(true);
-        setTimeout(() => setLiveUpdate(false), 2000);
-        loadLeaderboard(currentPage);
-      } catch (_) {}
+        payload = JSON.parse(event.data);
+      } catch (error) {
+        console.warn('Evento SSE ilegible:', error);
+        return;
+      }
+
+      if (payload.event === 'connected') return;
+
+      setLiveUpdate(true);
+      if (refreshTimer.current) return;
+
+      refreshTimer.current = setTimeout(() => {
+        refreshTimer.current = null;
+        setLiveUpdate(false);
+        queryClient.invalidateQueries({ queryKey: ['leaderboard', guildId] });
+      }, LIVE_REFRESH_MS);
     };
 
-    es.onerror = () => es.close();
-
-    return () => es.close();
-  }, [guildId, currentPage]);
-
-  const loadLeaderboard = async (page) => {
-    setLoading(true);
-    try {
-      // ========== PRIORIZAR ENDPOINT PÚBLICO ==========
-      try {
-        console.log('Usando endpoint público de leaderboard');
-        const response = await leaderboardService.getPublic(guildId, page);
-        setLeaderboard(response.data.leaderboard);
-        setPagination(response.data.pagination);
-      } catch (publicError) {
-        // Si falla público, intentar con autenticado (fallback)
-        console.log('Endpoint público falló, intentando autenticado');
-        const response = await leaderboardService.getLeaderboard(guildId, page);
-        setLeaderboard(response.data.leaderboard);
-        setPagination(response.data.pagination);
-        setIsAuthenticated(true);
+    // Sin handler propio, EventSource reconecta solo. El anterior cerraba la
+    // conexión al primer error y el "en vivo" ya no volvía nunca.
+    source.onerror = () => {
+      if (source.readyState === EventSource.CLOSED) {
+        console.warn('Conexión de leaderboard en vivo cerrada por el servidor');
       }
-      // ===============================================
+    };
 
-      // Fetch public guild info (name + icon)
-      const infoRes = await guildService.getPublicInfo(guildId).catch((err) => {
-        console.warn('Failed to load guild info', err);
-        return null;
-      });
-      if (infoRes && infoRes.data) {
-        setGuildInfo(infoRes.data);
+    return () => {
+      source.close();
+      if (refreshTimer.current) {
+        clearTimeout(refreshTimer.current);
+        refreshTimer.current = null;
       }
-    } catch (error) {
-      console.error('Error al cargar leaderboard:', error);
-      toast.error('Error cargando leaderboard');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+  }, [guildId, queryClient]);
 
-  const getRankIcon = (rank) => {
-    if (rank === 1) return <Trophy className="w-5 h-5 text-yellow-400" />;
-    if (rank === 2) return <Medal className="w-5 h-5 text-gray-400" />;
-    if (rank === 3) return <Medal className="w-5 h-5 text-amber-600" />;
-    return <Award className="w-5 h-5 text-gray-500" />;
-  };
-
-  const getRankColor = (rank) => {
-    if (rank === 1) return 'text-yellow-400 bg-yellow-400/10';
-    if (rank === 2) return 'text-gray-400 bg-gray-400/10';
-    if (rank === 3) return 'text-amber-600 bg-amber-600/10';
-    return 'text-gray-400 bg-gray-700/30';
-  };
-
-  const getProgressPercentage = (user) => {
-    if (!user.progress) return 0;
-    return user.progress.percent || 0;
-  };
-
-  const changePage = (newPage) => {
-    setCurrentPage(newPage);
-    window.history.pushState({}, '', `?page=${newPage}`);
-    // Scroll to top cuando cambie de página
+  // La página vive en la URL: así el botón "atrás" del navegador funciona y el
+  // enlace se puede compartir apuntando a una página concreta.
+  const changePage = useCallback((newPage) => {
+    setSearchParams(newPage === 1 ? {} : { page: String(newPage) });
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, [setSearchParams]);
 
   if (loading && leaderboard.length === 0) {
     return (
@@ -143,7 +148,7 @@ function Leaderboard() {
 
             {!isAuthenticated && (
               <a
-                href={`${import.meta.env.VITE_API_URL ?? ''}/api/auth/login?redirect=/guild/${guildId}/leaderboard`}
+                href={loginUrl(`/guild/${guildId}/leaderboard`)}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 Iniciar Sesión
@@ -193,11 +198,103 @@ function Leaderboard() {
           </div>
         </div>
 
-        {/* Leaderboard Cards (Mobile-friendly) */}
-        <div className="space-y-3">
-          {leaderboard.map((user, index) => (
+        {/* Buscador: el endpoint pide sesión y pertenencia al servidor */}
+        {isAuthenticated && (
+          <div className="relative mb-6">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar un miembro por nombre..."
+              aria-label="Buscar un miembro en el ranking"
+              className="w-full bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 focus:border-indigo-500/70 focus:outline-none rounded-xl pl-12 pr-11 py-3 text-white placeholder-gray-500 transition-colors"
+            />
+            {search && (
+              <button
+                onClick={clearSearch}
+                aria-label="Limpiar la búsqueda"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+            {search.trim().length === 1 && (
+              <p className="text-gray-500 text-xs mt-2 ml-1">Escribí al menos 2 caracteres.</p>
+            )}
+          </div>
+        )}
+
+        {/* Resultados de búsqueda o ranking paginado */}
+        {isSearching ? (
+          <SearchResults
+            term={debouncedSearch}
+            results={searchResults}
+            loading={searchLoading}
+            error={searchError}
+            onClear={clearSearch}
+          />
+        ) : (
+          <div className="space-y-3">
+            {leaderboard.map((user, index) => (
+              <MemberCard key={user.userId || index} user={user} />
+            ))}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!isSearching && leaderboard.length === 0 && !loading && (
+          <div className="text-center py-16 bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50">
+            <Trophy className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+            <p className="text-gray-400 font-medium mb-2">No hay datos de leaderboard</p>
+            <p className="text-gray-500 text-sm">
+              Los usuarios comenzarán a aparecer cuando empiecen a ganar XP
+            </p>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!isSearching && pagination && pagination.totalPages > 1 && (
+          <div className="mt-8 mb-8 bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-400">
+                Mostrando <span className="text-white font-medium">{((currentPage - 1) * (pagination.limit || 10)) + 1}</span> - <span className="text-white font-medium">{Math.min(currentPage * (pagination.limit || 10), pagination.totalUsers)}</span> de <span className="text-white font-medium">{pagination.totalUsers}</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => changePage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Página anterior"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+
+                <span className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold min-w-[80px] text-center">
+                  {currentPage} / {pagination.totalPages}
+                </span>
+
+                <button
+                  onClick={() => changePage(Math.min(pagination.totalPages, currentPage + 1))}
+                  disabled={currentPage === pagination.totalPages}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Página siguiente"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function MemberCard({ user }) {
+  return (
             <div
-              key={user.userId || index}
               className={`bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border transition-all hover:scale-[1.01] ${
                 user.rank <= 3 ? 'border-indigo-500/50 shadow-lg shadow-indigo-500/20' : 'border-gray-700/50'
               }`}
@@ -267,54 +364,44 @@ function Leaderboard() {
                 </div>
               </div>
             </div>
+  );
+}
+
+function SearchResults({ term, results, loading, error, onClear }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <p className="text-gray-400">
+          {loading
+            ? 'Buscando...'
+            : `${results.length} resultado${results.length === 1 ? '' : 's'} para "${term}"`}
+        </p>
+        <button
+          onClick={onClear}
+          className="text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+        >
+          Volver al ranking
+        </button>
+      </div>
+
+      {error ? (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-300 text-sm">
+          {getApiError(error, 'No se pudo buscar en el ranking')}
+        </div>
+      ) : loading ? (
+        <div className="space-y-3">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="h-24 bg-gray-800/40 rounded-xl animate-pulse" />
           ))}
         </div>
-
-        {/* Empty State */}
-        {leaderboard.length === 0 && !loading && (
-          <div className="text-center py-16 bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50">
-            <Trophy className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-            <p className="text-gray-400 font-medium mb-2">No hay datos de leaderboard</p>
-            <p className="text-gray-500 text-sm">
-              Los usuarios comenzarán a aparecer cuando empiecen a ganar XP
-            </p>
-          </div>
-        )}
-
-        {/* Pagination */}
-        {pagination && pagination.totalPages > 1 && (
-          <div className="mt-8 mb-8 bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-400">
-                Mostrando <span className="text-white font-medium">{((currentPage - 1) * (pagination.limit || 10)) + 1}</span> - <span className="text-white font-medium">{Math.min(currentPage * (pagination.limit || 10), pagination.totalUsers)}</span> de <span className="text-white font-medium">{pagination.totalUsers}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => changePage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Página anterior"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-
-                <span className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold min-w-[80px] text-center">
-                  {currentPage} / {pagination.totalPages}
-                </span>
-
-                <button
-                  onClick={() => changePage(Math.min(pagination.totalPages, currentPage + 1))}
-                  disabled={currentPage === pagination.totalPages}
-                  className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Página siguiente"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      ) : results.length === 0 ? (
+        <div className="text-center py-12 bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700/50">
+          <Search className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-400">Ningún miembro coincide con la búsqueda</p>
+        </div>
+      ) : (
+        results.map(user => <MemberCard key={user.userId} user={user} />)
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
 import { body, param, validationResult } from 'express-validator';
 import RoleMenu from '../../models/RoleMenu.js';
 import logger from '../../utils/logger.js';
+import { trackRoleMenuMessage, untrackRoleMenuMessage } from '../../utils/roleMenuIndex.js';
 import { EmbedBuilder } from 'discord.js';
 
 const router = express.Router({ mergeParams: true });
@@ -87,7 +88,7 @@ async function addReactions(message, options) {
 router.get('/:guildId/role-menus', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId } = req.params;
-    const menus = await RoleMenu.find({ guildId }).sort({ createdAt: -1 }).lean();
+    const menus = await RoleMenu.find({ guildId }).sort({ createdAt: -1 }).limit(100).lean();
     res.json({ menus });
   } catch (e) {
     logger.error('Error al listar role menus:', e);
@@ -123,8 +124,8 @@ router.post('/:guildId/role-menus', isAuthenticated, hasGuildPermission, [
     const { guildId } = req.params;
     const { title, channelId, exclusive, options } = req.body;
 
-    // Verificar que el bot está en el servidor
-    const guild = req.discordClient ? await req.discordClient.guilds.fetch(guildId).catch(() => null) : null;
+    // hasGuildPermission ya resolvió el guild y lo dejó en req.guild.
+    const guild = req.guild;
     if (!guild) {
       return res.status(404).json({ error: 'El bot no está en este servidor' });
     }
@@ -135,12 +136,15 @@ router.post('/:guildId/role-menus', isAuthenticated, hasGuildPermission, [
       return res.status(400).json({ error: 'Canal no válido o no es un canal de texto' });
     }
 
-    // Verificar que todos los roles existen
-    for (const opt of options) {
-      const role = await guild.roles.fetch(opt.roleId).catch(() => null);
-      if (!role) {
-        return res.status(400).json({ error: `El rol ${opt.roleId} no existe en el servidor` });
-      }
+    // Un solo fetch del listado de roles en vez de uno por opción, que eran
+    // hasta 20 llamadas secuenciales a Discord por petición.
+    const roles = await guild.roles.fetch().catch(() => null);
+    if (!roles) {
+      return res.status(502).json({ error: 'No se pudieron obtener los roles del servidor' });
+    }
+    const missing = options.find(opt => !roles.has(opt.roleId));
+    if (missing) {
+      return res.status(400).json({ error: `El rol ${missing.roleId} no existe en el servidor` });
     }
 
     // Extraer emojiId de cada opción si aplica
@@ -201,7 +205,14 @@ router.put('/:guildId/role-menus/:id', isAuthenticated, hasGuildPermission, [
 ], async (req, res) => {
   try {
     const { guildId, id } = req.params;
-    const update = { ...req.body };
+    // Whitelist explícita de campos. Con `{ ...req.body }` se podía reasignar
+    // guildId a otro servidor, forzar `published`/`messageId`, o colar claves
+    // con `$` que findOneAndUpdate interpretaría como operadores de update.
+    const update = {};
+    if (req.body.title !== undefined) update.title = req.body.title;
+    if (req.body.channelId !== undefined) update.channelId = req.body.channelId;
+    if (req.body.exclusive !== undefined) update.exclusive = req.body.exclusive;
+    if (Array.isArray(req.body.options)) update.options = req.body.options;
 
     // Buscar el menú existente
     const existingMenu = await RoleMenu.findOne({ _id: id, guildId });
@@ -227,8 +238,8 @@ router.put('/:guildId/role-menus/:id', isAuthenticated, hasGuildPermission, [
     }
 
     const menu = await RoleMenu.findOneAndUpdate(
-      { _id: id, guildId }, 
-      update, 
+      { _id: id, guildId },
+      { $set: update },
       { new: true }
     );
 
@@ -267,8 +278,10 @@ router.put('/:guildId/role-menus/:id', isAuthenticated, hasGuildPermission, [
               await addReactions(newMessage, menu.options);
               
               // Actualizar el messageId
+              untrackRoleMenuMessage(existingMenu.messageId);
               menu.messageId = newMessage.id;
               await menu.save();
+              trackRoleMenuMessage(newMessage.id);
               
               logger.info(`✅ Menú re-publicado exitosamente con nuevo mensaje: ${newMessage.id}`);
             } else {
@@ -322,7 +335,8 @@ router.delete('/:guildId/role-menus/:id', isAuthenticated, hasGuildPermission, [
       }
     }
 
-    await RoleMenu.findByIdAndDelete(id);
+    await RoleMenu.deleteOne({ _id: id, guildId });
+    untrackRoleMenuMessage(menu.messageId);
     
     logger.info(`Role menu eliminado: ${id} de guild ${guildId}`);
     res.json({ ok: true });
@@ -388,6 +402,7 @@ router.post('/:guildId/role-menus/:id/publish', isAuthenticated, hasGuildPermiss
     menu.messageId = sent.id;
     menu.published = true;
     await menu.save();
+    trackRoleMenuMessage(sent.id);
 
     logger.info(`Role menu publicado: ${id} en canal ${menu.channelId} del guild ${guildId}`);
     

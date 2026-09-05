@@ -1,27 +1,45 @@
 import express from 'express';
-import { isAuthenticated } from '../middleware/auth.js';
+import { isAuthenticated, isGuildMember } from '../middleware/auth.js';
 import User from '../../models/User.js';
 import logger from '../../utils/logger.js';
 import { query, param, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
-import { xpForLevel } from '../../bot/utils/levelSystem.js';
+import { getLeaderboard, progressFor } from '../../services/leaderboardService.js';
 import { addSseClient, removeSseClient } from '../../utils/sseClients.js';
 
 const router = express.Router();
 
-// Simple cache en memoria para endpoints públicos: key = guildId:page:limit
+// Cache en memoria para el endpoint público: key = guildId:page:limit:sortBy.
+// `page` va acotado y el Map tiene tope porque la clave la controla el cliente:
+// con ?page=999999 arbitrarios crecía sin límite.
 const publicCache = new Map();
-const CACHE_TTL_MS = 30 * 1000; // 30 segundos
+const CACHE_TTL_MS = 30 * 1000;
+const CACHE_MAX_ENTRIES = 500;
+const CACHE_MAX_PAGE = 20;
 
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of publicCache.entries()) {
     if (now - entry.ts > CACHE_TTL_MS) publicCache.delete(key);
   }
-}, CACHE_TTL_MS);
+}, CACHE_TTL_MS).unref();
+
+function cacheGet(key) {
+  const entry = publicCache.get(key);
+  return entry && Date.now() - entry.ts < CACHE_TTL_MS ? entry.value : null;
+}
+
+function cacheSet(key, value, page) {
+  if (page > CACHE_MAX_PAGE) return;
+  if (publicCache.size >= CACHE_MAX_ENTRIES) {
+    // Desalojo simple: el Map preserva el orden de inserción.
+    publicCache.delete(publicCache.keys().next().value);
+  }
+  publicCache.set(key, { ts: Date.now(), value });
+}
 
 const validatePagination = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
+  query('page').optional().isInt({ min: 1, max: 10000 }).toInt(),
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
   query('sortBy').optional().isIn(['totalXp', 'level', 'messageCount']),
   (req, res, next) => {
@@ -35,64 +53,36 @@ const validatePagination = [
 
 // Rate limiter para ruta pública (por IP)
 const publicLimiter = rateLimit({
-  windowMs: 30 * 1000, // 30s
-  max: 20, // max 20 requests por 30s por IP (aumentado para permitir más fetches)
+  windowMs: 30 * 1000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// Rutas autenticadas existentes (se mantienen)
-router.get('/:guildId', isAuthenticated, validatePagination, async (req, res) => {
-  try {
-    const { guildId } = req.params;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const sortBy = req.query.sortBy || 'totalXp';
-
-    const skip = (page - 1) * limit;
-
-    const users = await User.find({ guildId })
-      .sort({ [sortBy]: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await User.countDocuments({ guildId });
-
-    const usersNeedingFetch = users.filter(u => !u.username);
-    const discordFetched = new Map();
-    if (req.discordClient && usersNeedingFetch.length > 0) {
-      await Promise.all(usersNeedingFetch.map(async u => {
-        const discordUser = await req.discordClient.users.fetch(u.userId).catch(() => null);
-        if (discordUser) {
-          discordFetched.set(u.userId, discordUser);
-          User.updateDiscordInfo(u.guildId, u.userId, discordUser).catch(err =>
-            logger.warn('Error cacheando info de Discord:', err.message)
-          );
-        }
-      }));
+function toResponse(result) {
+  return {
+    leaderboard: result.users,
+    pagination: {
+      page: result.page,
+      limit: result.limit,
+      totalUsers: result.total,
+      totalPages: result.pages
     }
+  };
+}
 
-    const enrichedUsers = users.map((user, index) => {
-      const discordUser = discordFetched.get(user.userId);
-      return {
-        ...user.toObject(),
-        rank: skip + index + 1,
-        username: discordUser ? discordUser.username : user.username || null,
-        discriminator: discordUser ? discordUser.discriminator : user.discriminator || null,
-        avatar: discordUser ? discordUser.displayAvatarURL({ dynamic: true, size: 128 }) : user.avatar || null,
-        progress: typeof user.getXpProgress === 'function' ? user.getXpProgress() : undefined,
-      };
+// Leaderboard del servidor. Exige pertenencia: antes bastaba con estar logueado
+// con cualquier cuenta para leer el de cualquier guild.
+router.get('/:guildId', isAuthenticated, isGuildMember, validatePagination, async (req, res) => {
+  try {
+    const result = await getLeaderboard(req.params.guildId, {
+      page: req.query.page,
+      limit: req.query.limit,
+      sortBy: req.query.sortBy,
+      client: req.discordClient
     });
 
-    res.json({
-      leaderboard: enrichedUsers,
-      pagination: {
-        page,
-        limit,
-        totalUsers: total,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
-      },
-    });
+    res.json(toResponse(result));
   } catch (error) {
     logger.error('Error al obtener leaderboard:', error);
     res.status(500).json({ error: 'Error al obtener leaderboard' });
@@ -110,90 +100,46 @@ router.get('/public/:guildId/events', publicLimiter, (req, res) => {
   });
   res.flushHeaders();
   res.write('data: {"event":"connected"}\n\n');
-  addSseClient(guildId, res);
-  req.on('close', () => removeSseClient(guildId, res));
+
+  if (!addSseClient(guildId, res)) {
+    res.end();
+    return;
+  }
+
+  // Un comentario SSE cada 25 s: mantiene viva la conexión y detecta sockets
+  // que ya no están, que antes se acumulaban indefinidamente.
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      clearInterval(heartbeat);
+      removeSseClient(guildId, res);
+    }
+  }, 25 * 1000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    removeSseClient(guildId, res);
+  });
 });
 // =========================================================================
 
-// ========== RUTA PÚBLICA CON DISCORD FETCH ==========
+// ========== RUTA PÚBLICA ==========
 router.get('/public/:guildId', publicLimiter, validatePagination, async (req, res) => {
   try {
     const { guildId } = req.params;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
     const sortBy = req.query.sortBy || 'totalXp';
 
-    // ========== CACHE: Comprobar si hay datos en cache ==========
     const cacheKey = `${guildId}:${page}:${limit}:${sortBy}`;
-    const cached = publicCache.get(cacheKey);
-    if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
-      logger.info(`Cache hit para leaderboard público de ${guildId}`);
-      return res.json(cached.value);
-    }
-    // ============================================================
+    const cached = cacheGet(cacheKey);
+    if (cached) return res.json(cached);
 
-    const skip = (page - 1) * limit;
+    const result = await getLeaderboard(guildId, { page, limit, sortBy, client: req.discordClient });
+    const payload = toResponse(result);
 
-    const users = await User.find({ guildId })
-      .sort({ [sortBy]: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    const total = await User.countDocuments({ guildId });
-
-    const usersNeedingFetch = users.filter(u => !u.username);
-    const discordFetched = new Map();
-    if (req.discordClient && usersNeedingFetch.length > 0) {
-      await Promise.all(usersNeedingFetch.map(async u => {
-        const discordUser = await req.discordClient.users.fetch(u.userId).catch(() => null);
-        if (discordUser) {
-          discordFetched.set(u.userId, discordUser);
-          User.updateDiscordInfo(u.guildId, u.userId, discordUser).catch(err =>
-            logger.warn('Error actualizando info de Discord en BD:', err.message)
-          );
-        }
-      }));
-    }
-
-    const enriched = users.map((u, idx) => {
-      const rank = skip + idx + 1;
-      const currentLevelTotal = (typeof u.level === 'number') ? xpForLevel(u.level) : 0;
-      const nextLevelTotal = (typeof u.level === 'number') ? xpForLevel(u.level + 1) : 0;
-      const xpIntoLevel = Math.max(0, u.totalXp - currentLevelTotal);
-      const xpForNext = Math.max(0, nextLevelTotal - currentLevelTotal);
-
-      const discordUser = discordFetched.get(u.userId);
-      return {
-        userId: u.userId,
-        level: u.level,
-        totalXp: u.totalXp,
-        messageCount: u.messageCount,
-        rank,
-        username: discordUser ? discordUser.username : u.username || null,
-        discriminator: discordUser ? discordUser.discriminator : u.discriminator || null,
-        avatar: discordUser ? discordUser.displayAvatarURL({ dynamic: true, size: 128 }) : u.avatar || null,
-        progress: {
-          xp: xpIntoLevel,
-          xpForNextLevel: xpForNext,
-          percent: xpForNext > 0 ? Math.floor((xpIntoLevel / xpForNext) * 100) : 100
-        }
-      };
-    });
-
-    const payload = {
-      leaderboard: enriched,
-      pagination: {
-        page,
-        limit,
-        totalUsers: total,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
-      }
-    };
-
-    // Guardar en cache
-    publicCache.set(cacheKey, { ts: Date.now(), value: payload });
-
+    cacheSet(cacheKey, payload, page);
     res.json(payload);
   } catch (error) {
     logger.error('Error al obtener leaderboard público:', error);
@@ -202,7 +148,7 @@ router.get('/public/:guildId', publicLimiter, validatePagination, async (req, re
 });
 // ===================================================
 
-// Obtener top usuarios globales (todos los servidores)
+// Top usuarios entre los servidores del usuario autenticado
 router.get('/global/top', isAuthenticated, [
   query('limit').optional().isInt({ min: 1, max: 50 }).toInt(),
   (req, res, next) => {
@@ -214,7 +160,15 @@ router.get('/global/top', isAuthenticated, [
   try {
     const limit = parseInt(req.query.limit) || 10;
 
+    // Acotado a los servidores del usuario: sin el $match esto agregaba la
+    // colección entera (escaneo completo) y mezclaba datos de guilds ajenos.
+    const guildIds = (req.user?.guilds || []).map(g => String(g.id));
+    if (guildIds.length === 0) {
+      return res.json({ top: [] });
+    }
+
     const topUsers = await User.aggregate([
+      { $match: { guildId: { $in: guildIds } } },
       {
         $group: {
           _id: '$userId',
@@ -229,28 +183,16 @@ router.get('/global/top', isAuthenticated, [
       { $limit: limit }
     ]);
 
-    const usersNeedingFetch = topUsers.filter(u => !u.username);
-    const discordFetched = new Map();
-    if (req.discordClient && usersNeedingFetch.length > 0) {
-      await Promise.all(usersNeedingFetch.map(async u => {
-        const discordUser = await req.discordClient.users.fetch(u._id).catch(() => null);
-        if (discordUser) discordFetched.set(u._id, discordUser);
-      }));
-    }
-
-    const enriched = topUsers.map(u => {
-      const discordUser = discordFetched.get(u._id);
-      return {
+    res.json({
+      top: topUsers.map(u => ({
         userId: u._id,
         totalXp: u.totalXp,
         totalMessages: u.totalMessages,
         servers: u.servers,
-        username: discordUser ? discordUser.username : u.username || null,
-        avatar: discordUser ? discordUser.displayAvatarURL({ dynamic: true, size: 128 }) : u.avatar || null,
-      };
+        username: u.username || null,
+        avatar: u.avatar || null,
+      }))
     });
-
-    res.json({ top: enriched });
   } catch (error) {
     logger.error('Error al obtener top global:', error);
     res.status(500).json({ error: 'Error al obtener top global' });
@@ -258,9 +200,9 @@ router.get('/global/top', isAuthenticated, [
 });
 
 // Buscar usuarios en el leaderboard
-router.get('/:guildId/search', isAuthenticated, [
+router.get('/:guildId/search', isAuthenticated, isGuildMember, [
   param('guildId').exists(),
-  query('query').isString().isLength({ min: 2 }),
+  query('query').isString().isLength({ min: 2, max: 100 }),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -269,28 +211,34 @@ router.get('/:guildId/search', isAuthenticated, [
 ], async (req, res) => {
   try {
     const { guildId } = req.params;
-    const { query: q } = req.query;
+    const escaped = String(req.query.query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const users = await User.find({
-      guildId,
-      username: { $regex: escaped, $options: 'i' }
-    })
-      .sort({ totalXp: -1 })
-      .limit(20);
+    // El rango se calcula dentro del propio pipeline. Antes se hacía un
+    // countDocuments por resultado: hasta 20 consultas por búsqueda.
+    // Requiere MongoDB 5.0+ ($setWindowFields).
+    const results = await User.aggregate([
+      { $match: { guildId } },
+      {
+        $setWindowFields: {
+          sortBy: { totalXp: -1 },
+          output: { rank: { $documentNumber: {} } }
+        }
+      },
+      { $match: { username: { $regex: escaped, $options: 'i' } } },
+      { $sort: { totalXp: -1 } },
+      { $limit: 20 },
+      {
+        $project: {
+          _id: 0,
+          userId: 1, level: 1, totalXp: 1, messageCount: 1,
+          username: 1, discriminator: 1, avatar: 1, rank: 1
+        }
+      }
+    ]);
 
-    const enrichedUsers = await Promise.all(
-      users.map(async (user) => {
-        const rank = typeof user.getRank === 'function' ? await user.getRank() : undefined;
-        return {
-          ...user.toObject(),
-          rank,
-          progress: typeof user.getXpProgress === 'function' ? user.getXpProgress() : undefined,
-        };
-      })
-    );
-
-    res.json({ results: enrichedUsers });
+    res.json({
+      results: results.map(u => ({ ...u, progress: progressFor(u.level, u.totalXp) }))
+    });
   } catch (error) {
     logger.error('Error en búsqueda de leaderboard:', error);
     res.status(500).json({ error: 'Error en búsqueda' });
@@ -298,55 +246,57 @@ router.get('/:guildId/search', isAuthenticated, [
 });
 
 // Obtener estadísticas del servidor
-router.get('/:guildId/stats', isAuthenticated, async (req, res) => {
+router.get('/:guildId/stats', isAuthenticated, isGuildMember, async (req, res) => {
   try {
     const { guildId } = req.params;
 
-    const stats = await User.aggregate([
+    // Un solo pipeline: los dos findOne extra recorrían la colección otra vez.
+    const [result] = await User.aggregate([
       { $match: { guildId } },
       {
-        $group: {
-          _id: null,
-          totalUsers: { $sum: 1 },
-          totalXp: { $sum: '$totalXp' },
-          totalMessages: { $sum: '$messageCount' },
-          avgLevel: { $avg: '$level' },
-          maxLevel: { $max: '$level' },
+        $facet: {
+          totals: [{
+            $group: {
+              _id: null,
+              totalUsers: { $sum: 1 },
+              totalXp: { $sum: '$totalXp' },
+              totalMessages: { $sum: '$messageCount' },
+              avgLevel: { $avg: '$level' },
+              maxLevel: { $max: '$level' },
+            }
+          }],
+          topUser: [
+            { $sort: { totalXp: -1 } },
+            { $limit: 1 },
+            { $project: { _id: 0, userId: 1, username: 1, level: 1, totalXp: 1 } }
+          ],
+          mostActive: [
+            { $sort: { messageCount: -1 } },
+            { $limit: 1 },
+            { $project: { _id: 0, userId: 1, username: 1, messageCount: 1 } }
+          ]
         }
       }
     ]);
 
-    if (stats.length === 0) {
+    const totals = result?.totals?.[0];
+
+    if (!totals) {
       return res.json({
         totalUsers: 0,
         totalXp: 0,
         totalMessages: 0,
         avgLevel: 0,
         maxLevel: 0,
+        topUser: null,
+        mostActive: null
       });
     }
 
-    const topUser = await User.findOne({ guildId })
-      .sort({ totalXp: -1 })
-      .limit(1);
-
-    const mostActive = await User.findOne({ guildId })
-      .sort({ messageCount: -1 })
-      .limit(1);
-
     res.json({
-      ...stats[0],
-      topUser: topUser ? {
-        userId: topUser.userId,
-        username: topUser.username,
-        level: topUser.level,
-        totalXp: topUser.totalXp,
-      } : null,
-      mostActive: mostActive ? {
-        userId: mostActive.userId,
-        username: mostActive.username,
-        messageCount: mostActive.messageCount,
-      } : null,
+      ...totals,
+      topUser: result.topUser[0] || null,
+      mostActive: result.mostActive[0] || null
     });
   } catch (error) {
     logger.error('Error al obtener estadísticas:', error);

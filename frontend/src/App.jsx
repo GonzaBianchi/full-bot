@@ -1,109 +1,118 @@
-import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import './App.css'
-import Navbar from './components/Navbar'
-import GuildSettings from './pages/GuildSettings'
-import Leaderboard from './pages/Leaderboard'
-import Home from './pages/Home'
-import RoleMenus from './pages/RoleMenus'
-import { authService } from './services/api'
+import { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import Navbar from './components/Navbar';
+import { ErrorBoundary } from './components/layout/ErrorBoundary';
+import { LoadingSpinner } from './components/ui/LoadingSpinner';
+import Landing from './pages/Landing';
+import { useMe } from './hooks/queries';
+import { authService, loginUrl } from './services/api';
 
-// Wrapper component to handle scroll behavior
-function AppContent({ user, onLogout }) {
+// El leaderboard público es la ruta que más se comparte fuera del servidor:
+// no tiene por qué descargar el panel de configuración entero.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const GuildSettings = lazy(() => import('./pages/GuildSettings'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const RoleMenus = lazy(() => import('./pages/RoleMenus'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+/**
+ * Manda a Discord conservando la ruta pedida, para volver a ella tras el login
+ * en vez de aterrizar siempre en la home.
+ */
+function RequireAuth({ user, isPending, children }) {
   const location = useLocation();
-  
-  // Determinar si la ruta actual necesita Navbar
-  const showNavbar = !location.pathname.includes('/leaderboard') && !!user;
-  
-  // Determinar si la ruta actual necesita layout con sidebar (GuildSettings)
-  const isGuildSettingsRoute = location.pathname.includes('/guild/') && !location.pathname.includes('/leaderboard');
-  
+  const needsLogin = !isPending && !user;
+
+  useEffect(() => {
+    if (needsLogin) {
+      window.location.href = loginUrl(location.pathname + location.search);
+    }
+  }, [needsLogin, location.pathname, location.search]);
+
+  if (isPending) return <LoadingSpinner text="Verificando sesión..." />;
+  if (needsLogin) return <LoadingSpinner text="Redirigiendo a Discord..." />;
+
+  return children;
+}
+
+function AppContent({ user, isPending, onLogout }) {
+  const location = useLocation();
+
+  // El leaderboard es público y trae su propia cabecera.
+  const isPublicLeaderboard = location.pathname.endsWith('/leaderboard');
+  const isGuildSettings = location.pathname.startsWith('/guild/') && !isPublicLeaderboard;
+
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
-      {showNavbar && <Navbar user={user} onLogout={onLogout} />}
-      <div className={`flex-1 ${isGuildSettingsRoute ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-        <Routes>
-          <Route path="/" element={<Home user={user} />} />
-          <Route path="/dashboard" element={<div className="p-6">Bienvenido al dashboard</div>} />
-          
-          {/* ========== RUTA PÚBLICA: Leaderboard ========== */}
-          <Route path="/guild/:guildId/leaderboard" element={<Leaderboard />} />
-          {/* ================================================ */}
-          
-          {/* Rutas protegidas */}
-          <Route path="/guild/:guildId" element={<GuildSettings />} />
-          <Route path="/guild/:guildId/role-menus" element={<RoleMenus />} />
-        </Routes>
+      {!isPublicLeaderboard && <Navbar user={user} onLogout={onLogout} />}
+
+      <div className={`flex-1 ${isGuildSettings ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        <ErrorBoundary key={location.pathname}>
+          <Suspense fallback={<LoadingSpinner />}>
+            <Routes>
+              <Route path="/" element={<Landing user={user} />} />
+
+              {/* Ruta pública: cualquiera con el link ve el ranking */}
+              <Route path="/guild/:guildId/leaderboard" element={<Leaderboard />} />
+
+              <Route
+                path="/dashboard"
+                element={
+                  <RequireAuth user={user} isPending={isPending}>
+                    <Dashboard user={user} />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/guild/:guildId"
+                element={
+                  <RequireAuth user={user} isPending={isPending}>
+                    <GuildSettings />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/guild/:guildId/role-menus"
+                element={
+                  <RequireAuth user={user} isPending={isPending}>
+                    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+                      <RoleMenus />
+                    </div>
+                  </RequireAuth>
+                }
+              />
+
+              <Route path="/home" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </div>
     </div>
   );
 }
 
 function App() {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    loadUser()
-  }, [])
-
-  const loadUser = async () => {
-    try {
-      const response = await authService.getMe()
-      setUser(response.data)
-    } catch (error) {
-      console.error('Error loading user:', error)
-      setUser(null)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { data: user, isPending } = useMe();
+  const queryClient = useQueryClient();
 
   const onLogout = async () => {
     try {
-      await fetch(`${import.meta.env.VITE_API_URL ?? ''}/api/auth/logout`, {
-        method: 'POST', 
-        credentials: 'include' 
-      })
-      window.location.href = '/'
+      await authService.logout();
     } catch (error) {
-      console.error('Error logging out:', error)
-      window.location.href = '/'
+      console.error('Error cerrando sesión:', error);
+    } finally {
+      queryClient.clear();
+      window.location.href = '/';
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-discord-dark">
-        <div className="text-white">Cargando...</div>
-      </div>
-    )
-  }
-
-  // ========== IMPORTANTE: Rutas públicas (sin autenticación) ==========
-  const currentPath = window.location.pathname;
-  const isPublicRoute = currentPath.includes('/leaderboard') || currentPath === '/';
-
-  if (!user && !isPublicRoute) {
-    const loginUrl = `${import.meta.env.VITE_API_URL ?? ''}/api/auth/login?redirect=${encodeURIComponent('/')}`
-    
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-discord-dark">
-        <div className="text-white">
-          <a href={loginUrl} className="px-4 py-2 bg-discord-blurple rounded">
-            Entrar con Discord
-          </a>
-        </div>
-      </div>
-    )
-  }
-  // ================================================================================
+  };
 
   return (
     <BrowserRouter>
-      <AppContent user={user} onLogout={onLogout} />
+      <AppContent user={user} isPending={isPending} onLogout={onLogout} />
     </BrowserRouter>
-  )
+  );
 }
 
-export default App
+export default App;

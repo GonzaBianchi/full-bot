@@ -1,23 +1,26 @@
 import React, { useState } from 'react';
-import { useAutoRoles } from '../../hooks/useAutoRoles';
+import { useGuildSettings } from '../../hooks/useGuildSettings';
 import { StickyActionBar } from '../ui/StickyActionBar';
 import { StyledSelect } from '../ui/StyledSelect';
 import { SectionCard } from '../ui/SectionCard';
 import { InfoAlert } from '../ui/InfoAlert';
 import { Shield, UserPlus, Crown, MessageCircle, Plus, X, Hash } from 'lucide-react';
 
-export function AutoRolesSettings({ guildId, config, channels, roles }) {
+export function AutoRolesSettings() {
   const {
-    settings,
-    loading,
-    saving,
-    hasChanges,
-    updateSettings,
-    saveSettings,
-    resetSettings,
-    addRole: addRoleToSettings,
-    removeRole
-  } = useAutoRoles(guildId, config);
+    channels,
+    roles,
+    autoRoles: {
+      settings,
+      saving,
+      hasChanges,
+      updateSettings,
+      saveSettings,
+      resetSettings,
+      addRole: addRoleToSettings,
+      removeRole
+    }
+  } = useGuildSettings();
 
   const [selectedRole, setSelectedRole] = useState('');
 
@@ -32,10 +35,9 @@ export function AutoRolesSettings({ guildId, config, channels, roles }) {
     await saveSettings();
   };
 
+  // El borrador vuelve al último valor guardado, sin diálogo nativo.
   const handleReset = () => {
-    if (confirm('¿Estás seguro de descartar los cambios?')) {
-      resetSettings();
-    }
+    resetSettings();
   };
 
   const getRoleName = (roleId) => {
@@ -47,28 +49,6 @@ export function AutoRolesSettings({ guildId, config, channels, roles }) {
     const role = roles.find(r => r.id === roleId);
     return role?.color || '#99aab5';
   };
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white flex items-center space-x-3">
-              <UserPlus className="w-8 h-8 text-blue-400" />
-              <span>Auto-Roles</span>
-            </h2>
-            <p className="text-gray-400 mt-1">
-              Configura roles automáticos para nuevos miembros
-            </p>
-          </div>
-        </div>
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="text-gray-400 mt-4">Cargando configuración...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Preparar opciones para los selects
   const channelOptions = channels.map(ch => ({ id: ch.id, name: `# ${ch.name}` }));
@@ -83,7 +63,8 @@ export function AutoRolesSettings({ guildId, config, channels, roles }) {
         hasChanges={hasChanges}
         saving={saving}
         onSave={handleSave}
-        onReset={handleReset}
+        onDiscard={handleReset}
+        showReset={false}
         saveText="Guardar Configuración"
       />
 

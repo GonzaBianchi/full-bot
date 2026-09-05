@@ -3,6 +3,7 @@ import express from 'express';
 import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
 import GuildModel from '../../models/Guild.js';
 import logger from '../../utils/logger.js';
+import { invalidateGuildConfig } from '../../utils/guildConfigCache.js';
 import { body, param, validationResult } from 'express-validator';
 
 const router = express.Router();
@@ -12,10 +13,13 @@ router.get('/:guildId/config/birthdays', isAuthenticated, hasGuildPermission, as
   try {
     const { guildId } = req.params;
     
-    let cfg = await GuildModel.findOne({ guildId }).lean();
-    if (!cfg) {
-      cfg = await GuildModel.create({ guildId });
-    }
+    // Un GET no debe escribir: si el servidor aún no tiene documento,
+    
+    // devolvemos los defaults del esquema sin crearlo.
+    
+    const cfg = await GuildModel.findOne({ guildId }).lean()
+    
+      || new GuildModel({ guildId }).toObject();
 
     res.json({ 
       birthdays: cfg.birthdays || {
@@ -87,6 +91,7 @@ router.post('/:guildId/config/birthdays',
       );
 
       logger.info(`✅ Configuración de cumpleaños actualizada para guild ${guildId}`);
+      invalidateGuildConfig(guildId);
       res.json({ birthdays: cfg.birthdays });
     } catch (error) {
       logger.error('Error actualizando configuración de cumpleaños:', error);
@@ -119,6 +124,7 @@ router.delete('/:guildId/config/birthdays',
       );
 
       logger.info(`✅ Configuración de cumpleaños reseteada para guild ${guildId}`);
+      invalidateGuildConfig(guildId);
       res.json({ birthdays: cfg.birthdays });
     } catch (error) {
       logger.error('Error reseteando configuración de cumpleaños:', error);

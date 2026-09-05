@@ -1,4 +1,5 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { chunkForField } from '../../utils/embedText.js';
 import achievementService from '../../services/achievementService.js';
 import logger from '../../utils/logger.js';
 
@@ -49,46 +50,49 @@ export default {
       const completed = progress.achievements.filter(a => a.completed);
       const inProgress = progress.achievements.filter(a => !a.completed);
 
-      // Logros en progreso - MOSTRAR TODOS
+      // Logros en progreso. El texto se trocea: un servidor con muchos logros
+      // superaba el límite de 1024 caracteres por field y Discord rechazaba el
+      // embed entero.
       if (inProgress.length > 0) {
-        let progressText = '';
-        
-        for (const ach of inProgress) {
+        const blocks = inProgress.map(ach => {
           const icon = ach.achievement.icon || '🏆';
           const progressBar = createModernProgressBar(ach.progress, 12);
-          
-          progressText += `\n**${icon} ${ach.achievement.name}**\n`;
-          progressText += `${progressBar} \`${ach.progress}%\`\n`;
-          
+
+          let block = `\n**${icon} ${ach.achievement.name}**\n`;
+          block += `${progressBar} \`${ach.progress}%\`\n`;
+
           if (ach.nextTier) {
             const remaining = ach.nextTier.target - ach.currentValue;
-            progressText += `└─ Siguiente: **${ach.nextTier.title}** ${ach.nextTier.emoji || ''}\n`;
-            progressText += `   Faltan: \`${formatValue(remaining, ach.achievement.type)}\`\n`;
+            block += `└─ Siguiente: **${ach.nextTier.title}** ${ach.nextTier.emoji || ''}\n`;
+            block += `   Faltan: \`${formatValue(remaining, ach.achievement.type)}\`\n`;
           }
-        }
 
-        mainEmbed.addFields({
-          name: `⏳ En Progreso (${inProgress.length})`,
-          value: progressText || 'Ninguno',
-          inline: false
+          return block;
+        });
+
+        chunkForField(blocks).forEach((value, i) => {
+          mainEmbed.addFields({
+            name: i === 0 ? `⏳ En Progreso (${inProgress.length})` : '⏳ En Progreso (cont.)',
+            value,
+            inline: false
+          });
         });
       }
 
-      // Logros completados - MOSTRAR TODOS
+      // Logros completados, troceados por el mismo motivo.
       if (completed.length > 0) {
-        let completedText = '';
-        
-        for (const ach of completed) {
+        const blocks = completed.map(ach => {
           const icon = ach.achievement.icon || '🏆';
           const maxTier = ach.currentTier;
-          
-          completedText += `${icon} **${ach.achievement.name}** ${maxTier?.emoji || '✨'} \`${maxTier?.title || 'MAX'}\`\n`;
-        }
+          return `${icon} **${ach.achievement.name}** ${maxTier?.emoji || '✨'} \`${maxTier?.title || 'MAX'}\`\n`;
+        });
 
-        mainEmbed.addFields({
-          name: `✅ Completados (${completed.length})`,
-          value: completedText || 'Ninguno',
-          inline: false
+        chunkForField(blocks).forEach((value, i) => {
+          mainEmbed.addFields({
+            name: i === 0 ? `✅ Completados (${completed.length})` : '✅ Completados (cont.)',
+            value,
+            inline: false
+          });
         });
       }
 
@@ -118,7 +122,7 @@ export default {
       
       const errorMessage = interaction.deferred 
         ? { content: '❌ Error al obtener los logros. Intenta de nuevo más tarde.' }
-        : { content: '❌ Error al obtener los logros.', ephemeral: true };
+        : { content: '❌ Error al obtener los logros.', flags: MessageFlags.Ephemeral };
 
       if (interaction.deferred) {
         await interaction.editReply(errorMessage);

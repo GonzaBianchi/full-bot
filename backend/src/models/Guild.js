@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const GuildSchema = new mongoose.Schema({
-  guildId: { type: String, required: true, unique: true, index: true },
+  guildId: { type: String, required: true, unique: true },
   
   // XP y niveles
   xpMultiplier: { type: Number, default: 1.0 },
@@ -83,11 +83,12 @@ const GuildSchema = new mongoose.Schema({
     embedColor: { type: String, default: '#FF69B4' }
   },
   // ======================================================
-  
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
 
-GuildSchema.index({ guildId: 1 });
+  // Metadatos del servidor, refrescados en guildCreate. Se escribían antes de
+  // existir en el esquema, así que Mongoose los descartaba en silencio.
+  name: { type: String, default: null },
+  icon: { type: String, default: null },
+  ownerId: { type: String, default: null }
+}, { timestamps: true });
 
 export default mongoose.models.Guild || mongoose.model('Guild', GuildSchema);

@@ -66,7 +66,7 @@ router.post('/:guildId/messages/send',
         return res.status(403).json({ error: 'El bot no tiene permisos para enviar mensajes en este canal' });
       }
 
-      let messagePayload = {};
+      const messagePayload = {};
 
       if (type === 'text') {
         // Mensaje de texto simple
@@ -135,7 +135,7 @@ router.post('/:guildId/messages/send',
       logger.error('Error enviando mensaje:', error);
       res.status(500).json({ 
         error: 'Error al enviar el mensaje',
-        details: error.message 
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }

@@ -1,4 +1,5 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
+import { dashboardUrl } from '../../utils/urls.js';
 import GuildModel from '../../models/Guild.js';
 import logger from '../../utils/logger.js';
 
@@ -16,15 +17,14 @@ export default {
       const guild = interaction.guild;
 
       // Obtener configuración
-      let config = await GuildModel.findOne({ guildId });
-      if (!config) {
-        config = await GuildModel.create({ guildId });
-      }
+      // Mostrar la configuración no debe crearla.
+      const config = await GuildModel.findOne({ guildId }).lean()
+        || new GuildModel({ guildId }).toObject();
 
       const embed = new EmbedBuilder()
         .setTitle(`⚙️ Configuración de ${guild.name}`)
         .setColor(0x5865F2)
-        .setThumbnail(guild.iconURL({ dynamic: true, size: 128 }));
+        .setThumbnail(guild.iconURL({ size: 128 }));
 
       // Sistema de XP
       let xpSystemText = `**Multiplicador:** ${config.xpMultiplier}x\n`;
@@ -47,7 +47,7 @@ export default {
 
       // Roles de nivel
       if (config.levelRoles && config.levelRoles.length > 0) {
-        const sortedRoles = config.levelRoles
+        const sortedRoles = [...config.levelRoles]
           .sort((a, b) => a.level - b.level)
           .slice(0, 10);
         
@@ -81,7 +81,7 @@ export default {
       // Panel web
       embed.addFields({
         name: '🌐 Panel Web',
-        value: `[Configurar en el panel](${process.env.FRONTEND_URL || 'https://therifthavenfull.vercel.app'}/guild/${guildId})`,
+        value: `[Configurar en el panel](${dashboardUrl()}/guild/${guildId})`,
         inline: false
       });
 
@@ -99,7 +99,7 @@ export default {
       if (interaction.deferred) {
         await interaction.editReply({ content: errorMsg });
       } else {
-        await interaction.reply({ content: errorMsg, ephemeral: true });
+        await interaction.reply({ content: errorMsg, flags: MessageFlags.Ephemeral });
       }
     }
   }

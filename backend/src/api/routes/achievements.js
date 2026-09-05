@@ -2,7 +2,9 @@ import express from 'express';
 import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
 import { body, param, validationResult } from 'express-validator';
 import Achievement from '../../models/Achievement.js';
+import UserAchievement from '../../models/UserAchievement.js';
 import achievementService from '../../services/achievementService.js';
+import { invalidateAchievements } from '../../utils/achievementDefsCache.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -13,7 +15,7 @@ const router = express.Router();
 router.get('/:guildId/config/achievements', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId } = req.params;
-    const achievements = await Achievement.find({ guildId }).sort({ type: 1, createdAt: 1 });
+    const achievements = await Achievement.find({ guildId }).sort({ type: 1, createdAt: 1 }).limit(200).lean();
     
     res.json({ achievements });
   } catch (error) {
@@ -26,7 +28,7 @@ router.get('/:guildId/config/achievements', isAuthenticated, hasGuildPermission,
 router.get('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId, id } = req.params;
-    const achievement = await Achievement.findOne({ _id: id, guildId });
+    const achievement = await Achievement.findOne({ _id: id, guildId }).lean();
     
     if (!achievement) {
       return res.status(404).json({ error: 'Logro no encontrado' });
@@ -122,6 +124,7 @@ router.post('/:guildId/config/achievements', isAuthenticated, hasGuildPermission
     }
 
     logger.info(`✅ Logro creado: ${achievement.name} en guild ${guildId}`);
+    invalidateAchievements(guildId);
     res.status(201).json({ achievement });
   } catch (error) {
     logger.error('Error creando logro:', error);
@@ -199,7 +202,21 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
 ], async (req, res) => {
   try {
     const { guildId, id } = req.params;
-    const updates = req.body;
+    // Whitelist explícita de campos. Pasar `req.body` entero permitía
+    // reasignar guildId a otro servidor y, con claves que empiezan por `$`,
+    // ejecutar operadores de update arbitrarios.
+    const ALLOWED = ['name', 'description', 'icon', 'tiers', 'boostRoleId', 'enabled'];
+    const updates = {};
+    for (const field of ALLOWED) {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    }
+    if (req.body.notifications && typeof req.body.notifications === 'object') {
+      const { enabled, channelId, message } = req.body.notifications;
+      updates.notifications = {};
+      if (enabled !== undefined) updates.notifications.enabled = enabled;
+      if (channelId !== undefined) updates.notifications.channelId = channelId;
+      if (message !== undefined) updates.notifications.message = message;
+    }
 
     // Validar tiers si se están actualizando
     if (updates.tiers) {
@@ -232,7 +249,7 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
 
     const achievement = await Achievement.findOneAndUpdate(
       { _id: id, guildId },
-      updates,
+      { $set: updates },
       { new: true }
     );
 
@@ -241,6 +258,7 @@ router.put('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPermiss
     }
 
     logger.info(`✅ Logro actualizado: ${achievement.name} en guild ${guildId}`);
+    invalidateAchievements(guildId);
     res.json({ achievement });
   } catch (error) {
     logger.error('Error actualizando logro:', error);
@@ -260,6 +278,7 @@ router.delete('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPerm
     }
 
     logger.info(`🗑️ Logro eliminado: ${achievement.name} de guild ${guildId}`);
+    invalidateAchievements(guildId);
     res.json({ ok: true, message: 'Logro eliminado correctamente' });
   } catch (error) {
     logger.error('Error eliminando logro:', error);
@@ -271,18 +290,21 @@ router.delete('/:guildId/config/achievements/:id', isAuthenticated, hasGuildPerm
 router.patch('/:guildId/config/achievements/:id/toggle', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId, id } = req.params;
-    
-    const achievement = await Achievement.findOne({ _id: id, guildId });
-    
+
+    // Update con pipeline: invierte `enabled` en una sola operación, en vez de
+    // leer, negar y guardar (dos toggles simultáneos se perdían uno).
+    const achievement = await Achievement.findOneAndUpdate(
+      { _id: id, guildId },
+      [{ $set: { enabled: { $not: '$enabled' }, updatedAt: '$$NOW' } }],
+      { new: true }
+    );
+
     if (!achievement) {
       return res.status(404).json({ error: 'Logro no encontrado' });
     }
 
-    achievement.enabled = !achievement.enabled;
-    achievement.updatedAt = new Date();
-    await achievement.save();
-
     logger.info(`🔄 Logro ${achievement.enabled ? 'habilitado' : 'deshabilitado'}: ${achievement.name}`);
+    invalidateAchievements(guildId);
     res.json({ achievement });
   } catch (error) {
     logger.error('Error toggling logro:', error);
@@ -294,40 +316,63 @@ router.patch('/:guildId/config/achievements/:id/toggle', isAuthenticated, hasGui
 router.get('/:guildId/config/achievements/:id/stats', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId, id } = req.params;
-    
-    const achievement = await Achievement.findOne({ _id: id, guildId });
+
+    const achievement = await Achievement.findOne({ _id: id, guildId }).lean();
     if (!achievement) {
       return res.status(404).json({ error: 'Logro no encontrado' });
     }
 
-    const UserAchievement = (await import('../../models/UserAchievement.js')).default;
-    
-    const users = await UserAchievement.find({
-      guildId,
-      'achievements.achievementId': achievement._id
-    });
+    // El conteo por tier se hace en Mongo. Antes se cargaban en memoria TODOS
+    // los UserAchievement del servidor y se recorrían una vez por tier.
+    const [result] = await UserAchievement.aggregate([
+      { $match: { guildId, 'achievements.achievementId': achievement._id } },
+      {
+        $project: {
+          progress: {
+            $first: {
+              $filter: {
+                input: '$achievements',
+                as: 'a',
+                cond: { $eq: ['$$a.achievementId', achievement._id] }
+              }
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalUsers: { $sum: 1 },
+          unlockedTiers: { $push: '$progress.unlockedTiers' }
+        }
+      }
+    ]);
+
+    const totalUsers = result?.totalUsers || 0;
+
+    // Cuántos usuarios tienen desbloqueado cada tier.
+    const unlockedPerTier = new Map();
+    for (const tiers of result?.unlockedTiers || []) {
+      for (const tier of tiers || []) {
+        unlockedPerTier.set(tier, (unlockedPerTier.get(tier) || 0) + 1);
+      }
+    }
 
     const stats = {
-      totalUsers: users.length,
-      tierStats: []
+      totalUsers,
+      tierStats: [...achievement.tiers]
+        .sort((a, b) => a.tier - b.tier)
+        .map(tier => {
+          const unlockedCount = unlockedPerTier.get(tier.tier) || 0;
+          return {
+            tier: tier.tier,
+            title: tier.title,
+            target: tier.target,
+            unlockedCount,
+            percentage: totalUsers > 0 ? Math.round((unlockedCount / totalUsers) * 100) : 0
+          };
+        })
     };
-
-    for (const tier of achievement.tiers.sort((a, b) => a.tier - b.tier)) {
-      const unlockedCount = users.filter(user => {
-        const progress = user.achievements.find(
-          a => a.achievementId.toString() === achievement._id.toString()
-        );
-        return progress && progress.unlockedTiers.includes(tier.tier);
-      }).length;
-
-      stats.tierStats.push({
-        tier: tier.tier,
-        title: tier.title,
-        target: tier.target,
-        unlockedCount,
-        percentage: users.length > 0 ? Math.round((unlockedCount / users.length) * 100) : 0
-      });
-    }
 
     res.json({ stats });
   } catch (error) {
@@ -447,6 +492,7 @@ router.post('/:guildId/config/achievements/default', isAuthenticated, hasGuildPe
     const created = await Achievement.insertMany(defaultAchievements);
 
     logger.info(`✅ Logros predeterminados creados para guild ${guildId}`);
+    invalidateAchievements(guildId);
     res.status(201).json({ 
       achievements: created,
       message: 'Logros predeterminados creados correctamente' 

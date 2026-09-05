@@ -1,66 +1,45 @@
 // frontend/src/hooks/useNotificationSettings.js
-import { useState, useEffect } from 'react';
-import { guildService } from '../services/api';
+import { useState } from 'react';
+import { guildService, getApiError } from '../services/api';
 import { toast } from 'react-hot-toast';
-import { useMultipleUnsavedChanges } from './useUnsavedChanges';
+import { useDraft } from './useDraft';
+import { useGuildInvalidation } from './queries';
+
+const DEFAULT_MESSAGE = '🎉 {mention} ha subido al nivel {level}!';
 
 export function useNotificationSettings(guildId, config) {
-  // Estados actuales
-  const [levelUpEnabled, setLevelUpEnabled] = useState(true);
-  const [levelUpChannel, setLevelUpChannel] = useState('');
-  const [levelUpMsg, setLevelUpMsg] = useState('');
-  
-  // Estados originales
-  const [originalLevelUpEnabled, setOriginalLevelUpEnabled] = useState(true);
-  const [originalLevelUpChannel, setOriginalLevelUpChannel] = useState('');
-  const [originalLevelUpMsg, setOriginalLevelUpMsg] = useState('');
-  
+  const saved = {
+    enabled: config?.levelUpEnabled ?? true,
+    channelId: config?.levelUpChannelId ?? '',
+    message: config?.levelUpMessage || DEFAULT_MESSAGE
+  };
+
+  const { draft, setDraft, hasChanges, markSaved, discard } = useDraft(saved);
   const [saving, setSaving] = useState(false);
+  const { invalidateConfig } = useGuildInvalidation(guildId);
 
-  // Inicializar valores
-  useEffect(() => {
-    if (config) {
-      const enabled = config.levelUpEnabled ?? true;
-      const channel = config.levelUpChannelId || '';
-      const msg = config.levelUpMessage || '🎉 {mention} ha subido al nivel {level}!';
-      
-      setLevelUpEnabled(enabled);
-      setOriginalLevelUpEnabled(enabled);
-      
-      setLevelUpChannel(channel);
-      setOriginalLevelUpChannel(channel);
-      
-      setLevelUpMsg(msg);
-      setOriginalLevelUpMsg(msg);
-    }
-  }, [config]);
-
-  // Detectar cambios
-  const hasChanges = useMultipleUnsavedChanges([
-    { current: levelUpEnabled, original: originalLevelUpEnabled },
-    { current: levelUpChannel, original: originalLevelUpChannel },
-    { current: levelUpMsg, original: originalLevelUpMsg }
-  ]);
-
-  // Guardar cambios
   const save = async () => {
+    // El backend exige entre 1 y 500 caracteres: cortarlo acá evita un 400.
+    if (draft.message.trim().length === 0) {
+      toast.error('El mensaje de nivel no puede quedar vacío');
+      return false;
+    }
+
     setSaving(true);
     try {
       await guildService.updateLevelUp(guildId, {
-        enabled: levelUpEnabled,
-        channelId: levelUpChannel || null,
-        message: levelUpMsg
+        enabled: draft.enabled,
+        channelId: draft.channelId || null,
+        message: draft.message
       });
-      
-      setOriginalLevelUpEnabled(levelUpEnabled);
-      setOriginalLevelUpChannel(levelUpChannel);
-      setOriginalLevelUpMsg(levelUpMsg);
-      
+
+      markSaved();
+      await invalidateConfig();
       toast.success('✅ Notificaciones guardadas correctamente');
       return true;
     } catch (error) {
       console.error('Error guardando:', error);
-      toast.error('❌ Error al guardar las notificaciones');
+      toast.error(getApiError(error, 'Error al guardar las notificaciones'));
       return false;
     } finally {
       setSaving(false);
@@ -68,18 +47,16 @@ export function useNotificationSettings(guildId, config) {
   };
 
   return {
-    // Estados
-    levelUpEnabled,
-    setLevelUpEnabled,
-    levelUpChannel,
-    setLevelUpChannel,
-    levelUpMsg,
-    setLevelUpMsg,
-    
-    // Acciones
+    levelUpEnabled: draft.enabled,
+    setLevelUpEnabled: (value) => setDraft(prev => ({ ...prev, enabled: value })),
+    levelUpChannel: draft.channelId,
+    setLevelUpChannel: (value) => setDraft(prev => ({ ...prev, channelId: value })),
+    levelUpMsg: draft.message,
+    setLevelUpMsg: (value) => setDraft(prev => ({ ...prev, message: value })),
+
     save,
-    
-    // Estado
+    discard,
+
     saving,
     hasChanges
   };

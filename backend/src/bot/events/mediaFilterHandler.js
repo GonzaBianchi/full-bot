@@ -1,7 +1,6 @@
 // backend/src/bot/events/mediaFilterHandler.js
 import logger from '../../utils/logger.js';
 import { EmbedBuilder } from 'discord.js';
-import { getGuildConfig } from '../../utils/guildConfigCache.js';
 
 /**
  * Verifica si un mensaje contiene multimedia
@@ -55,19 +54,15 @@ function hasMediaContent(message, config) {
 }
 
 /**
- * Configurar el handler de filtro multimedia
+ * Reenvía la multimedia de un mensaje al canal configurado.
+ * La configuración llega ya resuelta desde el pipeline de messageCreate: antes
+ * este handler registraba su propio listener y releía la config por su cuenta.
  */
-export async function setupMediaFilter(client) {
-  client.on('messageCreate', async (message) => {
+export async function handleMediaFilter(message, guildConfig) {
     try {
-      // Ignorar bots y DMs
-      if (message.author.bot || !message.guild) return;
-      
+      if (!guildConfig?.mediaFilter?.enabled) return;
+
       const guildId = message.guild.id;
-      
-      const guildConfig = await getGuildConfig(guildId);
-      if (!guildConfig || !guildConfig.mediaFilter?.enabled) return;
-      
       const { mediaFilter } = guildConfig;
       
       // Verificar si el mensaje viene de un canal fuente
@@ -157,9 +152,6 @@ export async function setupMediaFilter(client) {
     } catch (error) {
       logger.error('Error en media filter handler:', error);
     }
-  });
-  
-  logger.info('✅ Media filter handler configurado');
 }
 
 /**
@@ -174,4 +166,4 @@ function getEmojiForType(type) {
   return emojis[type] || '📎';
 }
 
-export default setupMediaFilter;
+export default handleMediaFilter;

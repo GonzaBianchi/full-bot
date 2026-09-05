@@ -5,8 +5,10 @@ import { StyledSelect } from '../ui/StyledSelect';
 import { InfoAlert } from '../ui/InfoAlert';
 import toast from 'react-hot-toast';
 import { guildService } from '../../services/api';
+import { useGuildSettings } from '../../hooks/useGuildSettings';
 
-export function CustomMessages({ guildId, channels }) {
+export function CustomMessages() {
+  const { guildId, channels } = useGuildSettings();
   const [messageType, setMessageType] = useState('text');
   const [selectedChannel, setSelectedChannel] = useState('');
   const [sending, setSending] = useState(false);
@@ -99,7 +101,7 @@ export function CustomMessages({ guildId, channels }) {
         };
       }
 
-      const response = await guildService.sendMessage(guildId, payload);
+      await guildService.sendMessage(guildId, payload);
       
       toast.success('Mensaje enviado correctamente');
       resetForm();

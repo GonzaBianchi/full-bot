@@ -1,6 +1,12 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import User from '../../models/User.js';
 import logger from '../../utils/logger.js';
+
+// Estaba repetido en tres subcomandos.
+const MONTH_NAMES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
 
 // Lista de timezones comunes para autocomplete
 const COMMON_TIMEZONES = [
@@ -117,7 +123,7 @@ export default {
         default:
           await interaction.reply({
             content: '❌ Subcomando no reconocido',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
       }
     } catch (error) {
@@ -128,7 +134,7 @@ export default {
       if (interaction.replied || interaction.deferred) {
         await interaction.editReply({ content: `❌ ${errorMsg}` });
       } else {
-        await interaction.reply({ content: `❌ ${errorMsg}`, ephemeral: true });
+        await interaction.reply({ content: `❌ ${errorMsg}`, flags: MessageFlags.Ephemeral });
       }
     }
   }
@@ -141,7 +147,7 @@ async function handleSet(interaction) {
   const timezone = interaction.options.getString('timezone');
   const userId = interaction.user.id;
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
     // Validar timezone (básico)
@@ -150,19 +156,23 @@ async function handleSet(interaction) {
     }
 
     // Setear cumpleaños (actualiza en TODOS los guilds donde esté el usuario)
-    await User.setBirthday(userId, day, month, timezone);
+    const result = await User.setBirthday(userId, day, month, timezone);
 
-    const monthNames = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
+    // Si el usuario no tiene ningún documento, no se guardó nada: antes se
+    // respondía "guardado exitosamente" igualmente.
+    if (result.matchedCount === 0) {
+      return await interaction.editReply({
+        content: '❌ Todavía no tienes actividad registrada en ningún servidor con este bot. Escribe un mensaje y vuelve a intentarlo.'
+      });
+    }
+
 
     const embed = new EmbedBuilder()
       .setColor('#00FF00')
       .setTitle('🎂 Cumpleaños configurado')
       .setDescription(`Tu cumpleaños ha sido guardado exitosamente`)
       .addFields(
-        { name: '📅 Fecha', value: `${day} de ${monthNames[month - 1]}`, inline: true },
+        { name: '📅 Fecha', value: `${day} de ${MONTH_NAMES[month - 1]}`, inline: true },
         { name: '🌍 Zona horaria', value: timezone, inline: true }
       )
       .setFooter({ text: 'El bot te felicitará automáticamente en los servidores configurados' })
@@ -191,16 +201,12 @@ async function handleVer(interaction) {
       userId: targetUser.id 
     }).lean();
 
-    if (!userRecord || !userRecord.birthday.day || !userRecord.birthday.month) {
+    if (!userRecord?.birthday?.day || !userRecord?.birthday?.month) {
       return await interaction.editReply({
         content: `❌ ${targetUser.username} no ha configurado su cumpleaños`
       });
     }
 
-    const monthNames = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
 
     const day = userRecord.birthday.day;
     const month = userRecord.birthday.month;
@@ -237,7 +243,7 @@ async function handleVer(interaction) {
       .setTitle(`🎂 Cumpleaños de ${targetUser.username}`)
       .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
       .addFields(
-        { name: '📅 Fecha', value: `${day} de ${monthNames[month - 1]}`, inline: true },
+        { name: '📅 Fecha', value: `${day} de ${MONTH_NAMES[month - 1]}`, inline: true },
         { name: '⏳ Próximo cumpleaños', value: statusText, inline: true },
         { name: '🌍 Zona horaria', value: timezone, inline: true }
       )
@@ -266,10 +272,6 @@ async function handleLista(interaction) {
       });
     }
 
-    const monthNames = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
 
     const embed = new EmbedBuilder()
       .setColor('#FF69B4')
@@ -281,8 +283,10 @@ async function handleLista(interaction) {
     const birthdayList = await Promise.all(
       upcomingBirthdays.map(async (record, index) => {
         try {
-          const discordUser = await interaction.client.users.fetch(record.userId).catch(() => null);
-          const username = discordUser ? discordUser.username : `Usuario ${record.userId}`;
+          // El nombre ya está guardado en Mongo; solo se consulta Discord si falta.
+          const username = record.username
+            || (await interaction.client.users.fetch(record.userId).catch(() => null))?.username
+            || `Usuario ${record.userId}`;
           
           const day = record.birthday.day;
           const month = record.birthday.month;
@@ -297,7 +301,7 @@ async function handleLista(interaction) {
             status = `En ${daysUntil} día${daysUntil !== 1 ? 's' : ''}`;
           }
           
-          return `${index + 1}. **${username}** - ${day} de ${monthNames[month - 1]} (${status})`;
+          return `${index + 1}. **${username}** - ${day} de ${MONTH_NAMES[month - 1]} (${status})`;
         } catch (e) {
           return null;
         }
@@ -325,7 +329,7 @@ async function handleLista(interaction) {
 async function handleBorrar(interaction) {
   const userId = interaction.user.id;
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
     // Borrar cumpleaños de TODOS los guilds

@@ -1,69 +1,66 @@
 // frontend/src/hooks/useGeneralSettings.js
-import { useState, useEffect } from 'react';
-import { guildService } from '../services/api';
+import { useState } from 'react';
+import { guildService, getApiError } from '../services/api';
 import { toast } from 'react-hot-toast';
-import { useMultipleUnsavedChanges } from './useUnsavedChanges';
+import { useDraft } from './useDraft';
+import { useGuildInvalidation } from './queries';
 
 export function useGeneralSettings(guildId, config) {
-  // Estados actuales
-  const [multiplier, setMultiplier] = useState('1');
-  const [ignoredChannels, setIgnoredChannels] = useState([]);
+  const saved = {
+    multiplier: String(config?.xpMultiplier ?? 1),
+    ignoredChannels: config?.ignoredChannels ?? []
+  };
+
+  const { draft, setDraft, hasChanges, markSaved, discard } = useDraft(saved);
   const [selectedChannel, setSelectedChannel] = useState('');
-  
-  // Estados originales
-  const [originalMultiplier, setOriginalMultiplier] = useState('1');
-  const [originalIgnoredChannels, setOriginalIgnoredChannels] = useState([]);
-  
   const [saving, setSaving] = useState(false);
+  const { invalidateConfig } = useGuildInvalidation(guildId);
 
-  // Inicializar valores cuando llega la config
-  useEffect(() => {
-    if (config) {
-      const mult = String(config.xpMultiplier || 1);
-      const ignored = config.ignoredChannels || [];
-      
-      setMultiplier(mult);
-      setOriginalMultiplier(mult);
-      
-      setIgnoredChannels(ignored);
-      setOriginalIgnoredChannels([...ignored]);
-    }
-  }, [config]);
+  const setMultiplier = (value) => setDraft(prev => ({ ...prev, multiplier: value }));
 
-  // Detectar cambios
-  const hasChanges = useMultipleUnsavedChanges([
-    { current: multiplier, original: originalMultiplier },
-    { current: ignoredChannels, original: originalIgnoredChannels }
-  ]);
-
-  // Agregar canal ignorado
   const addIgnoredChannel = () => {
-    if (selectedChannel && !ignoredChannels.includes(selectedChannel)) {
-      setIgnoredChannels([...ignoredChannels, selectedChannel]);
-      setSelectedChannel('');
-    }
+    if (!selectedChannel || draft.ignoredChannels.includes(selectedChannel)) return;
+    setDraft(prev => ({ ...prev, ignoredChannels: [...prev.ignoredChannels, selectedChannel] }));
+    setSelectedChannel('');
   };
 
-  // Remover canal ignorado
   const removeIgnoredChannel = (channelId) => {
-    setIgnoredChannels(ignoredChannels.filter(id => id !== channelId));
+    setDraft(prev => ({
+      ...prev,
+      ignoredChannels: prev.ignoredChannels.filter(id => id !== channelId)
+    }));
   };
 
-  // Guardar cambios
   const save = async () => {
+    const multiplier = parseFloat(draft.multiplier);
+    if (!Number.isFinite(multiplier) || multiplier <= 0) {
+      toast.error('El multiplicador debe ser un número mayor que 0');
+      return false;
+    }
+
     setSaving(true);
     try {
-      await guildService.updateMultiplier(guildId, parseFloat(multiplier));
-      await guildService.updateIgnoredChannels(guildId, ignoredChannels);
-      
-      setOriginalMultiplier(multiplier);
-      setOriginalIgnoredChannels([...ignoredChannels]);
-      
+      // Cada POST escribe una entrada en el audit log del servidor: mandar solo
+      // lo que cambió evita llenarlo de cambios que no ocurrieron.
+      const requests = [];
+      if (draft.multiplier !== saved.multiplier) {
+        requests.push(guildService.updateMultiplier(guildId, multiplier));
+      }
+      if (JSON.stringify(draft.ignoredChannels) !== JSON.stringify(saved.ignoredChannels)) {
+        requests.push(guildService.updateIgnoredChannels(guildId, draft.ignoredChannels));
+      }
+
+      if (requests.length > 0) {
+        await Promise.all(requests);
+        await invalidateConfig();
+      }
+
+      markSaved();
       toast.success('✅ Configuración general guardada correctamente');
       return true;
     } catch (error) {
       console.error('Error guardando:', error);
-      toast.error('❌ Error al guardar la configuración');
+      toast.error(getApiError(error, 'Error al guardar la configuración'));
       return false;
     } finally {
       setSaving(false);
@@ -71,19 +68,17 @@ export function useGeneralSettings(guildId, config) {
   };
 
   return {
-    // Estados
-    multiplier,
+    multiplier: draft.multiplier,
     setMultiplier,
-    ignoredChannels,
+    ignoredChannels: draft.ignoredChannels,
     selectedChannel,
     setSelectedChannel,
-    
-    // Acciones
+
     addIgnoredChannel,
     removeIgnoredChannel,
     save,
-    
-    // Estado
+    discard,
+
     saving,
     hasChanges
   };

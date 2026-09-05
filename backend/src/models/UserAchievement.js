@@ -10,8 +10,8 @@ const AchievementProgressSchema = new mongoose.Schema({
 
 // Esquema principal de progreso del usuario
 const UserAchievementSchema = new mongoose.Schema({
-  userId: { type: String, required: true, index: true },
-  guildId: { type: String, required: true, index: true },
+  userId: { type: String, required: true },
+  guildId: { type: String, required: true },
   
   // Estadísticas generales (para cálculos rápidos)
   stats: {
@@ -42,13 +42,5 @@ UserAchievementSchema.methods.getAchievementProgress = function(achievementId) {
   return this.achievements.find(a => a.achievementId.toString() === achievementId.toString());
 };
 
-// Método helper para actualizar estadísticas
-UserAchievementSchema.methods.incrementStat = async function(statType, value = 1) {
-  if (this.stats[statType] !== undefined) {
-    this.stats[statType] += value;
-    this.updatedAt = new Date();
-    await this.save();
-  }
-};
 
 export default mongoose.models.UserAchievement || mongoose.model('UserAchievement', UserAchievementSchema);

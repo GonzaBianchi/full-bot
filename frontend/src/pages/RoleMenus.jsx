@@ -1,65 +1,58 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { roleMenuService, guildService } from '../services/api';
+import { roleMenuService, getApiError } from '../services/api';
 import { Plus, Trash2, Edit, Send, AlertCircle, Shield, Hash, Smile, X, Save, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { useGuildResources, useRoleMenus, useGuildInvalidation } from '../hooks/queries';
 
 function RoleMenus() {
+  // Se renderiza como pestaña del panel y también como ruta propia. Las
+  // consultas van por react-query, así que canales y roles se reutilizan de
+  // la caché en vez de pedirse otra vez al montar la pestaña.
   const { guildId } = useParams();
-  const [menus, setMenus] = useState([]);
-  const [resources, setResources] = useState({ channels: [], roles: [], emojis: [] });
-  const [loading, setLoading] = useState(true);
+  const { data: menus = [], isPending: loadingMenus } = useRoleMenus(guildId);
+  const { data: resources, isPending: loadingResources } = useGuildResources(guildId);
+  const { invalidateRoleMenus } = useGuildInvalidation(guildId);
+
+  const loading = loadingMenus || loadingResources;
+  const channels = resources?.channels ?? [];
+  const roles = resources?.roles ?? [];
+  const emojis = resources?.emojis ?? [];
+
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(null);
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ 
-    title: '', 
-    channelId: '', 
-    exclusive: false, 
-    options: [] 
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [form, setForm] = useState({
+    title: '',
+    channelId: '',
+    exclusive: false,
+    options: []
   });
 
   const MAX_OPTIONS = 20;
 
-  useEffect(() => { load(); }, [guildId]);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [resMenus, resResources] = await Promise.all([
-        roleMenuService.list(guildId),
-        guildService.getResources(guildId)
-      ]);
-      setMenus(resMenus.data.menus || []);
-      setResources(resResources.data || { channels: [], roles: [], emojis: [] });
-    } catch (e) {
-      console.error('Error cargando role menus:', e);
-      toast.error('Error cargando menús');
-    } finally { 
-      setLoading(false); 
-    }
-  };
-
   const startNew = () => {
     setEditing(null);
-    setForm({ 
-      title: '', 
-      channelId: resources.channels?.[0]?.id || '', 
-      exclusive: false, 
-      options: [] 
+    setForm({
+      title: '',
+      channelId: channels[0]?.id || '',
+      exclusive: false,
+      options: []
     });
     setShowForm(true);
   };
 
   const edit = (menu) => {
     setEditing(menu);
-    setForm({ 
-      title: menu.title, 
-      channelId: menu.channelId, 
-      exclusive: menu.exclusive, 
-      options: [...menu.options] 
+    setForm({
+      title: menu.title,
+      channelId: menu.channelId,
+      exclusive: menu.exclusive,
+      options: [...menu.options]
     });
     setShowForm(true);
   };
@@ -70,15 +63,18 @@ function RoleMenus() {
     setForm({ title: '', channelId: '', exclusive: false, options: [] });
   };
 
-  const remove = async (id) => {
-    if (!confirm('¿Estás seguro de eliminar este menú de roles?')) return;
+  const remove = async () => {
+    const id = pendingDelete;
+    setPendingDelete(null);
+    if (!id) return;
+
     try {
       await roleMenuService.remove(guildId, id);
       toast.success('✅ Menú eliminado exitosamente');
-      load();
-    } catch (e) { 
-      console.error(e); 
-      toast.error('❌ Error eliminando el menú'); 
+      await invalidateRoleMenus();
+    } catch (e) {
+      console.error(e);
+      toast.error(getApiError(e, 'Error eliminando el menú'));
     }
   };
 
@@ -112,11 +108,10 @@ function RoleMenus() {
         toast.success('✅ Menú creado exitosamente');
       }
       cancelEdit();
-      // Forzar recarga completa para obtener los datos actualizados
-      await load();
-    } catch (e) { 
-      console.error(e); 
-      toast.error('❌ Error guardando el menú'); 
+      await invalidateRoleMenus();
+    } catch (e) {
+      console.error(e);
+      toast.error(getApiError(e, 'Error guardando el menú'));
     } finally {
       setSaving(false);
     }
@@ -132,10 +127,10 @@ function RoleMenus() {
     try {
       await roleMenuService.publish(guildId, menu._id);
       toast.success('✅ Menú publicado en el canal');
-      load();
-    } catch (e) { 
-      console.error(e); 
-      toast.error('❌ Error publicando el menú'); 
+      await invalidateRoleMenus();
+    } catch (e) {
+      console.error(e);
+      toast.error(getApiError(e, 'Error publicando el menú'));
     } finally {
       setPublishing(null);
     }
@@ -175,17 +170,17 @@ function RoleMenus() {
   };
 
   const getChannelName = (channelId) => {
-    const channel = resources.channels.find(c => c.id === channelId);
+    const channel = channels.find(c => c.id === channelId);
     return channel ? `# ${channel.name}` : 'Canal desconocido';
   };
 
   const getRoleName = (roleId) => {
-    const role = resources.roles.find(r => r.id === roleId);
+    const role = roles.find(r => r.id === roleId);
     return role ? role.name : 'Rol desconocido';
   };
 
   const getEmojiDisplay = (emojiIdentifier) => {
-    const emoji = resources.emojis.find(e => e.identifier === emojiIdentifier);
+    const emoji = emojis.find(e => e.identifier === emojiIdentifier);
     if (emoji && emoji.id) {
       return `https://cdn.discordapp.com/emojis/${emoji.id}.${emoji.animated ? 'gif' : 'png'}`;
     }
@@ -193,7 +188,7 @@ function RoleMenus() {
   };
 
   const isCustomEmoji = (emojiIdentifier) => {
-    const emoji = resources.emojis.find(e => e.identifier === emojiIdentifier);
+    const emoji = emojis.find(e => e.identifier === emojiIdentifier);
     return emoji && emoji.id;
   };
 
@@ -210,6 +205,16 @@ function RoleMenus() {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        danger
+        title="Eliminar el menú de roles"
+        description="El mensaje publicado deja de asignar roles. Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        onConfirm={remove}
+        onCancel={() => setPendingDelete(null)}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -281,7 +286,7 @@ function RoleMenus() {
             <SearchableSelect
               value={form.channelId}
               onChange={(val) => setForm({...form, channelId: val})}
-              options={resources.channels}
+              options={channels}
               placeholder="Seleccionar canal..."
               icon={Hash}
               renderOption={(channel) => (
@@ -360,7 +365,7 @@ function RoleMenus() {
                         <SearchableSelect
                           value={opt.emojiIdentifier}
                           onChange={(val) => updateOption(idx, 'emojiIdentifier', val)}
-                          options={resources.emojis.map(e => ({
+                          options={emojis.map(e => ({
                             id: e.identifier,
                             value: e.identifier,
                             name: e.name,
@@ -410,7 +415,7 @@ function RoleMenus() {
                         <SearchableSelect
                           value={opt.roleId}
                           onChange={(val) => updateOption(idx, 'roleId', val)}
-                          options={resources.roles}
+                          options={roles}
                           placeholder="Seleccionar rol..."
                           icon={Shield}
                           renderOption={(role) => (
@@ -578,7 +583,7 @@ function RoleMenus() {
                       <Edit className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => remove(m._id)} 
+                      onClick={() => setPendingDelete(m._id)} 
                       className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors cursor-pointer"
                       title="Eliminar menú"
                     >

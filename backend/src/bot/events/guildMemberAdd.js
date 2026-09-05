@@ -1,6 +1,6 @@
 // backend/src/bot/events/guildMemberAdd.js
-import GuildModel from '../../models/Guild.js';
 import UserModel from '../../models/User.js';
+import { getGuildConfig } from '../../utils/guildConfigCache.js';
 import { levelFromXp } from '../utils/levelSystem.js';
 import logger from '../../utils/logger.js';
 
@@ -14,19 +14,20 @@ export default {
       const guildId = member.guild.id;
       const userId = member.user.id;
 
-      // Obtener configuración del servidor
-      const guildConfig = await GuildModel.findOne({ guildId });
-      
-      if (!guildConfig || !guildConfig.autoRoles?.enabled) {
+      // Config cacheada y las dos lecturas en paralelo: iban en serie sin que
+      // una dependiera de la otra.
+      const [guildConfig, userRecord] = await Promise.all([
+        getGuildConfig(guildId),
+        UserModel.findOne({ guildId, userId }).select('totalXp').lean()
+      ]);
+
+      if (!guildConfig?.autoRoles?.enabled) {
         return; // Auto-roles deshabilitado
       }
 
       const { autoRoles } = guildConfig;
       const rolesToAssign = new Set();
 
-      // 1. Verificar si el usuario ya tenía XP previo en este servidor
-      const userRecord = await UserModel.findOne({ guildId, userId });
-      
       if (userRecord && userRecord.totalXp > 0 && autoRoles.restoreLevelRoles) {
         // Restaurar roles de nivel basados en su XP anterior
         const userLevel = levelFromXp(userRecord.totalXp);

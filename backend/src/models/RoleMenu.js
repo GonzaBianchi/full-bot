@@ -25,10 +25,9 @@ const OptionSchema = new mongoose.Schema({
 }, { _id: false });
 
 const RoleMenuSchema = new mongoose.Schema({
-  guildId: { 
-    type: String, 
-    required: true, 
-    index: true,
+  guildId: {
+    type: String,
+    required: true,
     description: 'ID del servidor de Discord'
   },
   title: { 
@@ -110,4 +109,4 @@ RoleMenuSchema.statics.findByMessage = function(messageId) {
   return this.findOne({ messageId }).lean();
 };
 
-export default mongoose.model('RoleMenu', RoleMenuSchema);
+export default mongoose.models.RoleMenu || mongoose.model('RoleMenu', RoleMenuSchema);

@@ -1,6 +1,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { isAuthenticated, hasGuildPermission } from '../middleware/auth.js';
+import { isAuthenticated, hasGuildPermission, canManageGuild } from '../middleware/auth.js';
 import GuildModel from '../../models/Guild.js';
 import AuditLog from '../../models/AuditLog.js';
 import logger from '../../utils/logger.js';
@@ -11,6 +11,7 @@ import autoRolesRoutes from './autoRoles.js';
 import achievementsRoutes from './achievements.js';
 import mediaFilterRoutes from './mediaFilter.js';
 import { invalidateGuildConfig } from '../../utils/guildConfigCache.js';
+import { invalidateGuildRankCards } from '../../utils/rankCardCache.js';
 
 // Per-guild rate limiter for config mutation endpoints
 const guildConfigLimiter = rateLimit({
@@ -40,10 +41,10 @@ router.use('/', mediaFilterRoutes);
 router.get('/:guildId/config', isAuthenticated, hasGuildPermission, async (req, res) => {
   try {
     const { guildId } = req.params;
-    let cfg = await GuildModel.findOne({ guildId });
-    if (!cfg) {
-      cfg = await GuildModel.create({ guildId });
-    }
+    // Un GET no debe escribir: si el servidor aún no tiene documento,
+    // devolvemos los defaults del esquema sin crearlo.
+    const cfg = await GuildModel.findOne({ guildId }).lean()
+      || new GuildModel({ guildId }).toObject();
     res.json({ config: cfg });
   } catch (e) {
     logger.error('Error al obtener config de guild:', e);
@@ -64,7 +65,7 @@ router.post('/:guildId/config/xp-multiplier', isAuthenticated, hasGuildPermissio
   try {
     const { guildId } = req.params;
     const { multiplier } = req.body;
-    let cfg = await GuildModel.findOneAndUpdate({ guildId }, { xpMultiplier: multiplier }, { new: true, upsert: true });
+    const cfg = await GuildModel.findOneAndUpdate({ guildId }, { xpMultiplier: multiplier }, { new: true, upsert: true });
     invalidateGuildConfig(guildId);
     auditLog(guildId, req, 'update_xp_multiplier', { multiplier });
     res.json({ config: cfg });
@@ -87,7 +88,7 @@ router.post('/:guildId/config/ignored-channels', isAuthenticated, hasGuildPermis
   try {
     const { guildId } = req.params;
     const { channels } = req.body;
-    let cfg = await GuildModel.findOneAndUpdate({ guildId }, { ignoredChannels: channels }, { new: true, upsert: true });
+    const cfg = await GuildModel.findOneAndUpdate({ guildId }, { ignoredChannels: channels }, { new: true, upsert: true });
     invalidateGuildConfig(guildId);
     auditLog(guildId, req, 'update_ignored_channels', { channels });
     res.json({ config: cfg });
@@ -254,7 +255,7 @@ router.get('/available', isAuthenticated, async (req, res) => {
     const invitables = []; // bot absent && user is admin
 
     for (const g of userGuilds) {
-      const hasAdmin = (parseInt(g.permissions || '0') & 0x8) === 0x8;
+      const hasAdmin = canManageGuild(g);
       if (!hasAdmin) continue;
 
       const botInGuild = req.discordClient && req.discordClient.guilds.cache.has(g.id);
@@ -273,53 +274,53 @@ router.get('/available', isAuthenticated, async (req, res) => {
   }
 });
 
-// Información básica del bot
+// Información básica del bot.
+// Es público y sin sesión, así que el conteo de usuarios se cachea: antes cada
+// petición anónima disparaba un distinct() sobre toda la colección `users`.
+let botInfoCache = null;
+const BOT_INFO_TTL_MS = 5 * 60 * 1000;
+
+async function countDistinctUsers(client) {
+  const guildIds = client?.guilds?.cache ? Array.from(client.guilds.cache.keys()) : [];
+
+  if (guildIds.length > 0) {
+    try {
+      const distinct = await UserModel.distinct('userId', { guildId: { $in: guildIds } });
+      if (Array.isArray(distinct) && distinct.length > 0) return distinct.length;
+    } catch (dbErr) {
+      logger.warn('No se pudo obtener userCount desde la DB:', dbErr.message);
+    }
+  }
+
+  // Fallback: sumar memberCount de la caché del cliente
+  const guilds = client?.guilds?.cache;
+  if (guilds && guilds.size > 0) {
+    return Array.from(guilds.values()).reduce((acc, g) => acc + (g.memberCount || 0), 0);
+  }
+
+  return client?.users?.cache?.size || 0;
+}
+
 router.get('/bot/info', async (req, res) => {
   try {
     const bot = req.discordClient && req.discordClient.user;
     if (!bot) return res.status(404).json({ error: 'Bot no conectado' });
 
-    // Count guilds from client's cache
-    const guildCount = req.discordClient?.guilds?.cache?.size || 0;
-
-    // Compute a more accurate user count:
-    let userCount = 0;
-    try {
-      const guildIds = req.discordClient?.guilds?.cache ? Array.from(req.discordClient.guilds.cache.keys()) : [];
-
-      if (guildIds.length > 0 && UserModel && UserModel.distinct) {
-        try {
-          const distinct = await UserModel.distinct('userId', { guildId: { $in: guildIds } });
-          if (Array.isArray(distinct) && distinct.length > 0) {
-            userCount = distinct.length;
-          }
-        } catch (dbErr) {
-          logger.warn('No se pudo obtener userCount desde la DB, se usará el recuento desde caché:', dbErr.message);
-        }
-      }
-
-      // Fallback: sum guild.memberCount
-      if (!userCount) {
-        const guilds = req.discordClient.guilds.cache;
-        if (guilds && guilds.size > 0) {
-          userCount = Array.from(guilds.values()).reduce((acc, g) => acc + (g.memberCount || 0), 0);
-        } else {
-          userCount = req.discordClient.users?.cache?.size || 0;
-        }
-      }
-    } catch (e) {
-      logger.warn('Error calculando userCount, fallback a users.cache:', e.message);
-      userCount = req.discordClient.users?.cache?.size || 0;
+    if (botInfoCache && Date.now() - botInfoCache.ts < BOT_INFO_TTL_MS) {
+      return res.json(botInfoCache.value);
     }
 
-    res.json({
+    const payload = {
       id: bot.id,
       username: bot.username,
       discriminator: bot.discriminator,
-      avatarURL: bot.displayAvatarURL({ dynamic: true }),
-      guildCount,
-      userCount
-    });
+      avatarURL: bot.displayAvatarURL(),
+      guildCount: req.discordClient?.guilds?.cache?.size || 0,
+      userCount: await countDistinctUsers(req.discordClient)
+    };
+
+    botInfoCache = { ts: Date.now(), value: payload };
+    res.json(payload);
   } catch (e) {
     logger.error('Error al obtener bot info:', e);
     res.status(500).json({ error: 'Error al obtener información del bot' });
@@ -330,13 +331,15 @@ router.get('/bot/info', async (req, res) => {
 router.get('/public/:guildId/info', async (req, res) => {
   try {
     const { guildId } = req.params;
-    const guild = req.discordClient ? await req.discordClient.guilds.fetch(guildId).catch(() => null) : null;
+    // Desde la caché del cliente: es un endpoint público y sin sesión, y un
+    // fetch por petición consumía el rate limit de Discord de forma gratuita.
+    const guild = req.discordClient?.guilds?.cache?.get(guildId) || null;
     if (!guild) return res.status(404).json({ error: 'El bot no está en este servidor o no se pudo obtener la información' });
 
     return res.json({
       id: guild.id,
       name: guild.name,
-      iconURL: guild.icon ? guild.iconURL({ dynamic: true, size: 128 }) : null
+      iconURL: guild.icon ? guild.iconURL({ size: 128 }) : null
     });
   } catch (e) {
     logger.error('Error al obtener public guild info:', e);
@@ -351,10 +354,13 @@ router.get('/:guildId/config/achievements-global', isAuthenticated, hasGuildPerm
   try {
     const { guildId } = req.params;
     
-    let cfg = await GuildModel.findOne({ guildId }).lean();
-    if (!cfg) {
-      cfg = await GuildModel.create({ guildId });
-    }
+    // Un GET no debe escribir: si el servidor aún no tiene documento,
+    
+    // devolvemos los defaults del esquema sin crearlo.
+    
+    const cfg = await GuildModel.findOne({ guildId }).lean()
+    
+      || new GuildModel({ guildId }).toObject();
 
     res.json({ 
       config: cfg.achievementsConfig || {
@@ -410,6 +416,7 @@ router.post('/:guildId/config/achievements-global',
       );
 
       logger.info(`✅ Configuración global de logros actualizada para guild ${guildId}`);
+      invalidateGuildConfig(guildId);
       res.json({ config: cfg.achievementsConfig });
     } catch (error) {
       logger.error('Error actualizando configuración global de logros:', error);
@@ -425,10 +432,13 @@ router.get('/:guildId/config/images', isAuthenticated, hasGuildPermission, async
   try {
     const { guildId } = req.params;
     
-    let cfg = await GuildModel.findOne({ guildId }).lean();
-    if (!cfg) {
-      cfg = await GuildModel.create({ guildId });
-    }
+    // Un GET no debe escribir: si el servidor aún no tiene documento,
+    
+    // devolvemos los defaults del esquema sin crearlo.
+    
+    const cfg = await GuildModel.findOne({ guildId }).lean()
+    
+      || new GuildModel({ guildId }).toObject();
 
     res.json({ 
       images: cfg.images || {
@@ -448,7 +458,7 @@ router.post('/:guildId/config/images/rank-card',
   hasGuildPermission, 
   [
     param('guildId').exists(),
-    body('url').optional().isString().isURL().isLength({ max: 2048 }),
+    body('url').optional().isString().isURL({ protocols: ['https'], require_protocol: true }).isLength({ max: 2048 }),
     body('blur').optional().isInt({ min: 0, max: 20 }),
     body('opacity').optional().isFloat({ min: 0, max: 1 }),
     (req, res, next) => {
@@ -476,6 +486,8 @@ router.post('/:guildId/config/images/rank-card',
       );
 
       logger.info(`✅ Imagen de rank card actualizada para guild ${guildId}`);
+      invalidateGuildConfig(guildId);
+      invalidateGuildRankCards(guildId);
       res.json({ images: cfg.images });
     } catch (error) {
       logger.error('Error actualizando imagen de rank card:', error);
@@ -490,7 +502,7 @@ router.post('/:guildId/config/images/achievement-notification',
   hasGuildPermission, 
   [
     param('guildId').exists(),
-    body('url').optional().isString().isURL().isLength({ max: 2048 }),
+    body('url').optional().isString().isURL({ protocols: ['https'], require_protocol: true }).isLength({ max: 2048 }),
     body('blur').optional().isInt({ min: 0, max: 20 }),
     body('opacity').optional().isFloat({ min: 0, max: 1 }),
     (req, res, next) => {
@@ -518,6 +530,8 @@ router.post('/:guildId/config/images/achievement-notification',
       );
 
       logger.info(`✅ Imagen de notificación de logros actualizada para guild ${guildId}`);
+      invalidateGuildConfig(guildId);
+      invalidateGuildRankCards(guildId);
       res.json({ images: cfg.images });
     } catch (error) {
       logger.error('Error actualizando imagen de notificación:', error);
@@ -553,6 +567,8 @@ router.delete('/:guildId/config/images/:type',
       );
 
       logger.info(`✅ Configuración de imagen ${type} reseteada para guild ${guildId}`);
+      invalidateGuildConfig(guildId);
+      invalidateGuildRankCards(guildId);
       res.json({ images: cfg.images });
     } catch (error) {
       logger.error('Error reseteando configuración de imagen:', error);

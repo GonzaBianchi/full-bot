@@ -2,9 +2,8 @@ import mongoose from 'mongoose';
 import { xpForLevel, levelFromXp } from '../bot/utils/levelSystem.js';
 
 const UserSchema = new mongoose.Schema({
-  userId: { type: String, required: true, index: true },
-  guildId: { type: String, required: true, index: true },
-  xp: { type: Number, default: 0 },
+  userId: { type: String, required: true },
+  guildId: { type: String, required: true },
   level: { type: Number, default: 0 },
   totalXp: { type: Number, default: 0 },
   messageCount: { type: Number, default: 0 },
@@ -45,24 +44,37 @@ UserSchema.methods.getRank = async function() {
 
 UserSchema.statics.addXp = async function(guildId, userId, amount) {
   const User = this;
-  let user = await User.findOne({ guildId, userId });
-  if (!user) {
-    user = new User({ guildId, userId });
-  }
 
-  user.totalXp += amount;
-  user.messageCount = (user.messageCount || 0) + 1;
-  user.lastMessageAt = new Date();
+  // $inc atómico: dos escrituras concurrentes sobre el mismo usuario se suman
+  // en vez de pisarse, que era lo que ocurría con findOne + save.
+  const user = await User.findOneAndUpdate(
+    { guildId, userId },
+    {
+      $inc: { totalXp: amount, messageCount: 1 },
+      $set: { lastMessageAt: new Date() }
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
 
-  const oldLevel = user.level;
   const newLevel = levelFromXp(user.totalXp);
+  let oldLevel = user.level;
+  let leveledUp = false;
+
   if (newLevel !== oldLevel) {
+    // Condicionado a que el nivel siga siendo distinto: si otra escritura
+    // concurrente ya lo actualizó, `previous` es null y no anunciamos dos veces.
+    const previous = await User.findOneAndUpdate(
+      { guildId, userId, level: { $ne: newLevel } },
+      { $set: { level: newLevel } }
+    );
+    if (previous) {
+      oldLevel = previous.level;
+      leveledUp = newLevel > oldLevel;
+    }
     user.level = newLevel;
   }
 
-  await user.save();
-
-  return { user, leveledUp: newLevel > oldLevel, oldLevel, newLevel };
+  return { user, leveledUp, oldLevel, newLevel };
 };
 
 // ========== NUEVO: Método para setear cumpleaños ==========
@@ -108,11 +120,12 @@ UserSchema.statics.getUpcomingBirthdays = async function(guildId, limit = 10) {
   const currentDay = now.getDate();
   
   // Obtener usuarios con cumpleaños configurado en este guild
-  const users = await User.find({ 
+  // Con proyección: solo se necesitan estos campos para ordenar y mostrar.
+  const users = await User.find({
     guildId,
     'birthday.day': { $ne: null },
     'birthday.month': { $ne: null }
-  }).lean();
+  }).select('userId username birthday').lean();
   
   // Calcular días hasta el cumpleaños
   const usersWithDays = users.map(user => {

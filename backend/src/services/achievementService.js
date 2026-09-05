@@ -1,6 +1,6 @@
-import Achievement from '../models/Achievement.js';
 import UserAchievement from '../models/UserAchievement.js';
-import GuildModel from '../models/Guild.js';
+import { getEnabledAchievements } from '../utils/achievementDefsCache.js';
+import { getGuildConfig } from '../utils/guildConfigCache.js';
 import { generateAchievementNotification } from '../bot/utils/achievementImageGenerator.js';
 import { AttachmentBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
@@ -12,9 +12,6 @@ class AchievementService {
     this.notificationCache = new Map(); // key: `${userId}-${guildId}-${achievementId}-${tier}`
     this.NOTIFICATION_COOLDOWN = 10000; // 10 segundos de cooldown
     // ===========================================================================
-        // ========== NUEVO: Lock para prevenir procesamiento concurrente ==========
-    this.processingLocks = new Map(); // key: `${userId}-${guildId}`
-    // =========================================================================
   }
 
   setClient(client) {
@@ -35,13 +32,21 @@ class AchievementService {
   }
   // ======================================================================
 
+  // Cada track* aplica un $inc atómico y evalúa los tiers sobre el valor que
+  // devuelve Mongo. El patrón anterior (findOne → mutar → save) perdía
+  // incrementos cuando dos eventos del mismo usuario se solapaban.
+  async bumpStat(userId, guildId, statField, delta) {
+    return UserAchievement.findOneAndUpdate(
+      { userId, guildId },
+      { $inc: { [`stats.${statField}`]: delta }, $set: { updatedAt: new Date() } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+  }
+
   async trackMessage(userId, guildId, channelId = null) {
     try {
-      const userAch = await this.getUserAchievement(userId, guildId);
-      userAch.stats.totalMessages += 1;
-      
+      const userAch = await this.bumpStat(userId, guildId, 'totalMessages', 1);
       await this.checkAndUnlockAchievements(userAch, 'messages', channelId);
-      await userAch.save();
     } catch (error) {
       logger.error('Error tracking message achievement:', error);
     }
@@ -49,11 +54,8 @@ class AchievementService {
 
   async trackReaction(userId, guildId, channelId = null) {
     try {
-      const userAch = await this.getUserAchievement(userId, guildId);
-      userAch.stats.totalReactions += 1;
-      
+      const userAch = await this.bumpStat(userId, guildId, 'totalReactions', 1);
       await this.checkAndUnlockAchievements(userAch, 'reactions', channelId);
-      await userAch.save();
     } catch (error) {
       logger.error('Error tracking reaction achievement:', error);
     }
@@ -61,11 +63,8 @@ class AchievementService {
 
   async trackReactionGiven(userId, guildId, channelId = null) {
     try {
-      const userAch = await this.getUserAchievement(userId, guildId);
-      userAch.stats.totalReactionsGiven += 1;
-      
+      const userAch = await this.bumpStat(userId, guildId, 'totalReactionsGiven', 1);
       await this.checkAndUnlockAchievements(userAch, 'reactions_given', channelId);
-      await userAch.save();
     } catch (error) {
       logger.error('Error tracking reaction given achievement:', error);
     }
@@ -73,12 +72,11 @@ class AchievementService {
 
   async trackVoiceJoin(userId, guildId, channelId) {
     try {
-      const userAch = await this.getUserAchievement(userId, guildId);
-      userAch.currentVoiceSession = {
-        channelId,
-        joinedAt: new Date()
-      };
-      await userAch.save();
+      await UserAchievement.updateOne(
+        { userId, guildId },
+        { $set: { currentVoiceSession: { channelId, joinedAt: new Date() }, updatedAt: new Date() } },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
     } catch (error) {
       logger.error('Error tracking voice join:', error);
     }
@@ -86,16 +84,20 @@ class AchievementService {
 
   async trackVoiceLeave(userId, guildId, channelId = null) {
     try {
-      const userAch = await this.getUserAchievement(userId, guildId);
-      
-      if (userAch.currentVoiceSession?.joinedAt) {
-        const duration = Math.floor((Date.now() - userAch.currentVoiceSession.joinedAt.getTime()) / 1000);
-        userAch.stats.totalVoiceTime += duration;
-        userAch.currentVoiceSession = { channelId: null, joinedAt: null };
-        
-        await this.checkAndUnlockAchievements(userAch, 'voice_time', channelId);
-        await userAch.save();
-      }
+      // Cerrar la sesión y leer su pre-image en una sola operación: si llegan
+      // dos salidas seguidas, solo la primera encuentra `joinedAt` y el tiempo
+      // no se contabiliza dos veces.
+      const previous = await UserAchievement.findOneAndUpdate(
+        { userId, guildId, 'currentVoiceSession.joinedAt': { $ne: null } },
+        { $set: { currentVoiceSession: { channelId: null, joinedAt: null } } }
+      );
+      if (!previous) return;
+
+      const duration = Math.floor((Date.now() - previous.currentVoiceSession.joinedAt.getTime()) / 1000);
+      if (duration <= 0) return;
+
+      const userAch = await this.bumpStat(userId, guildId, 'totalVoiceTime', duration);
+      await this.checkAndUnlockAchievements(userAch, 'voice_time', channelId);
     } catch (error) {
       logger.error('Error tracking voice leave:', error);
     }
@@ -103,11 +105,12 @@ class AchievementService {
 
   async trackBoost(userId, guildId, channelId = null) {
     try {
-      const userAch = await this.getUserAchievement(userId, guildId);
-      userAch.stats.hasBoosted = true;
-      
+      const userAch = await UserAchievement.findOneAndUpdate(
+        { userId, guildId },
+        { $set: { 'stats.hasBoosted': true, updatedAt: new Date() } },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      );
       await this.checkAndUnlockAchievements(userAch, 'boost', channelId);
-      await userAch.save();
     } catch (error) {
       logger.error('Error tracking boost achievement:', error);
     }
@@ -115,10 +118,11 @@ class AchievementService {
 
   async trackBoostRemoved(userId, guildId) {
     try {
-      const userAch = await this.getUserAchievement(userId, guildId);
-      userAch.stats.hasBoosted = false;
-      await userAch.save();
-      
+      await UserAchievement.updateOne(
+        { userId, guildId },
+        { $set: { 'stats.hasBoosted': false, updatedAt: new Date() } },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
       logger.info(`Usuario ${userId} removió su boost en guild ${guildId}`);
     } catch (error) {
       logger.error('Error tracking boost removal:', error);
@@ -126,98 +130,97 @@ class AchievementService {
   }
 
   async getUserAchievement(userId, guildId) {
-    let userAch = await UserAchievement.findOne({ userId, guildId });
-    
-    if (!userAch) {
-      userAch = await UserAchievement.create({ userId, guildId });
-      
-      const achievements = await Achievement.find({ guildId, enabled: true });
-      for (const ach of achievements) {
-        userAch.achievements.push({
-          achievementId: ach._id,
-          currentValue: 0,
-          unlockedTiers: []
-        });
-      }
-      await userAch.save();
+    // Las entradas de `achievements` se crean bajo demanda en
+    // checkAndUnlockAchievements, así que no hace falta pre-sembrarlas aquí.
+    return UserAchievement.findOneAndUpdate(
+      { userId, guildId },
+      { $setOnInsert: { achievements: [] } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+  }
+
+  statValueFor(userAch, type) {
+    switch (type) {
+      case 'messages':        return userAch.stats.totalMessages;
+      case 'reactions':       return userAch.stats.totalReactions;
+      case 'reactions_given': return userAch.stats.totalReactionsGiven;
+      case 'voice_time':      return userAch.stats.totalVoiceTime;
+      case 'boost':           return userAch.stats.hasBoosted ? 1 : 0;
+      default:                return 0;
     }
-    
-    return userAch;
   }
 
   async checkAndUnlockAchievements(userAch, type, channelId = null) {
-    const lockKey = `${userAch.userId}-${userAch.guildId}`;
-
-    if (this.processingLocks.get(lockKey)) {
-      logger.info(`Achievement check ya en proceso para ${lockKey}, ignorando duplicado`);
-      return;
-    }
-
-    this.processingLocks.set(lockKey, true);
+    const { userId, guildId } = userAch;
 
     try {
-      const achievements = await Achievement.find({
-        guildId: userAch.guildId,
-        type,
-        enabled: true
-      });
+      const achievements = await getEnabledAchievements(guildId, type);
+      if (achievements.length === 0) return;
 
-      const unlockedTiers = [];
+      const currentValue = this.statValueFor(userAch, type);
+      const unlocked = [];
 
       for (const achievement of achievements) {
-        let progress = userAch.achievements.find(
-          a => a.achievementId.toString() === achievement._id.toString()
+        // Crear la entrada de progreso si falta. El $ne la hace idempotente
+        // frente a dos comprobaciones concurrentes.
+        await UserAchievement.updateOne(
+          { userId, guildId, 'achievements.achievementId': { $ne: achievement._id } },
+          { $push: { achievements: { achievementId: achievement._id, currentValue: 0, unlockedTiers: [] } } }
         );
 
-        if (!progress) {
-          progress = { achievementId: achievement._id, currentValue: 0, unlockedTiers: [] };
-          userAch.achievements.push(progress);
-        }
+        await UserAchievement.updateOne(
+          { userId, guildId, 'achievements.achievementId': achievement._id },
+          { $set: { 'achievements.$.currentValue': currentValue } }
+        );
 
-        switch (type) {
-          case 'messages':      progress.currentValue = userAch.stats.totalMessages; break;
-          case 'reactions':     progress.currentValue = userAch.stats.totalReactions; break;
-          case 'reactions_given': progress.currentValue = userAch.stats.totalReactionsGiven; break;
-          case 'voice_time':    progress.currentValue = userAch.stats.totalVoiceTime; break;
-          case 'boost':         progress.currentValue = userAch.stats.hasBoosted ? 1 : 0; break;
-        }
+        const tiers = [...achievement.tiers].sort((a, b) => a.tier - b.tier);
 
-        for (const tier of achievement.tiers.sort((a, b) => a.tier - b.tier)) {
-          const alreadyUnlocked = progress.unlockedTiers.includes(tier.tier);
-          const hasReachedTarget = progress.currentValue >= tier.target;
-          const cacheKey = `${userAch.userId}-${userAch.guildId}-${achievement._id}-${tier.tier}`;
-          const recentlyNotified = this.notificationCache.has(cacheKey);
+        for (const tier of tiers) {
+          if (currentValue < tier.target) continue;
 
-          if (hasReachedTarget && !alreadyUnlocked && !recentlyNotified) {
-            this.notificationCache.set(cacheKey, Date.now());
-            progress.unlockedTiers.push(tier.tier);
-            progress.lastUnlockedAt = new Date();
+          // La condición sobre unlockedTiers hace la concesión idempotente:
+          // solo la primera escritura modifica el documento, y solo esa
+          // notifica. El desbloqueo se persiste ANTES de anunciarlo.
+          const res = await UserAchievement.updateOne(
+            {
+              userId,
+              guildId,
+              achievements: {
+                $elemMatch: { achievementId: achievement._id, unlockedTiers: { $ne: tier.tier } }
+              }
+            },
+            {
+              $addToSet: { 'achievements.$.unlockedTiers': tier.tier },
+              $set: { 'achievements.$.lastUnlockedAt': new Date() }
+            }
+          );
 
-            logger.info(`✅ Usuario ${userAch.userId} desbloqueó: ${achievement.name} - ${tier.title} (tier ${tier.tier}) en guild ${userAch.guildId}`);
-
-            unlockedTiers.push({ userId: userAch.userId, guildId: userAch.guildId, achievement, tier, channelId });
+          if (res.modifiedCount === 1) {
+            logger.info(`Usuario ${userId} desbloqueó: ${achievement.name} - ${tier.title} (tier ${tier.tier}) en guild ${guildId}`);
+            unlocked.push({ achievement, tier });
           }
         }
       }
 
-      // Las notificaciones se envían aquí; el save lo hace el caller (trackMessage, etc.)
-      for (const unlock of unlockedTiers) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await this.sendAchievementNotification(unlock.userId, unlock.guildId, unlock.achievement, unlock.tier, unlock.channelId);
-        if (unlock.tier.rewardRoleId) {
-          await this.assignRewardRole(unlock.userId, unlock.guildId, unlock.tier.rewardRoleId);
+      // Un fallo al notificar no revierte el desbloqueo ya persistido, pero
+      // tampoco debe impedir el resto de los anuncios ni la recompensa.
+      for (const { achievement, tier } of unlocked) {
+        try {
+          await this.sendAchievementNotification(userId, guildId, achievement, tier, channelId);
+        } catch (e) {
+          logger.error(`No se pudo notificar ${achievement.name} (tier ${tier.tier}) a ${userId}:`, e?.message || e);
+        }
+
+        if (tier.rewardRoleId) {
+          try {
+            await this.assignRewardRole(userId, guildId, tier.rewardRoleId);
+          } catch (e) {
+            logger.error(`No se pudo asignar el rol de recompensa ${tier.rewardRoleId} a ${userId}:`, e?.message || e);
+          }
         }
       }
-
-      if (unlockedTiers.length > 0) {
-        logger.info(`💾 ${unlockedTiers.length} nuevos desbloqueos para ${userAch.userId}`);
-      }
-
     } catch (error) {
       logger.error('Error en checkAndUnlockAchievements:', error);
-      throw error;
-    } finally {
-      this.processingLocks.delete(lockKey);
     }
   }
 
@@ -260,9 +263,9 @@ class AchievementService {
         return;
       }
 
-      const guildConfig = await GuildModel.findOne({ guildId }).lean();
+      const guildConfig = await getGuildConfig(guildId);
       
-      let notificationChannelId = guildConfig?.achievementsConfig?.notificationChannelId 
+      const notificationChannelId = guildConfig?.achievementsConfig?.notificationChannelId 
         || achievement.notifications.channelId 
         || fallbackChannelId;
       
@@ -356,10 +359,9 @@ class AchievementService {
 
   async getUserProgress(userId, guildId) {
     const userAch = await this.getUserAchievement(userId, guildId);
-    const achievements = await Achievement.find({ guildId, enabled: true }).lean();
+    const achievements = await getEnabledAchievements(guildId);
 
     const progress = [];
-    let totalProgress = 0;
     let completedTiers = 0;
     let totalTiers = 0;
 
@@ -388,7 +390,8 @@ class AchievementService {
       }
 
       const unlockedTiers = userProgress?.unlockedTiers || [];
-      const sortedTiers = achievement.tiers.sort((a, b) => a.tier - b.tier);
+      // Copia: el array viene de la caché compartida de definiciones.
+      const sortedTiers = [...achievement.tiers].sort((a, b) => a.tier - b.tier);
       
       let currentTier = null;
       let nextTier = null;
@@ -432,7 +435,7 @@ class AchievementService {
       });
     }
 
-    totalProgress = totalTiers > 0 ? Math.floor((completedTiers / totalTiers) * 100) : 0;
+    const totalProgress = totalTiers > 0 ? Math.floor((completedTiers / totalTiers) * 100) : 0;
 
     return {
       userId,

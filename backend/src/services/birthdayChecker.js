@@ -1,7 +1,7 @@
 // backend/src/services/birthdayChecker.js
 import cron from 'node-cron';
 import User from '../models/User.js';
-import Guild from '../models/Guild.js';
+import { getGuildConfig } from '../utils/guildConfigCache.js';
 import logger from '../utils/logger.js';
 import { EmbedBuilder } from 'discord.js';
 
@@ -9,33 +9,41 @@ class BirthdayChecker {
   constructor(client) {
     this.client = client;
     this.cronJob = null;
+    this.initialRun = null;
   }
 
   /**
    * Inicia el cron job que revisa cumpleaños cada hora
    */
   start() {
-    // Ejecutar cada hora en el minuto 0
     // Cron: '0 * * * *' = cada hora a las XX:00
     this.cronJob = cron.schedule('0 * * * *', async () => {
       await this.checkBirthdays();
     });
 
-    logger.info('✅ Birthday checker iniciado (verifica cada hora)');
-    
-    // Ejecutar una vez al inicio
-    setTimeout(() => {
+    logger.info('Birthday checker iniciado (verifica cada hora)');
+
+    // Ejecutar una vez al inicio. Se guarda la referencia para poder
+    // cancelarla: antes seguía viva tras el shutdown.
+    this.initialRun = setTimeout(() => {
+      this.initialRun = null;
       this.checkBirthdays();
     }, 5000);
+    this.initialRun.unref();
   }
 
   /**
    * Detiene el cron job
    */
   stop() {
+    if (this.initialRun) {
+      clearTimeout(this.initialRun);
+      this.initialRun = null;
+    }
     if (this.cronJob) {
       this.cronJob.stop();
-      logger.info('🛑 Birthday checker detenido');
+      this.cronJob = null;
+      logger.info('Birthday checker detenido');
     }
   }
 
@@ -54,7 +62,7 @@ class BirthdayChecker {
       
       const formatter = new Intl.DateTimeFormat('en-US', options);
       const timeString = formatter.format(now);
-      const [hour, minute] = timeString.split(':').map(Number);
+      const [hour] = timeString.split(':').map(Number);
       
       // Es medianoche si es la hora 00:XX (entre 00:00 y 00:59)
       return hour === 0;
@@ -93,20 +101,53 @@ class BirthdayChecker {
   }
 
   /**
+   * Días candidatos a "hoy" en alguna zona horaria del mundo: el desfase va de
+   * UTC-12 a UTC+14, así que basta con mirar ayer, hoy y mañana en UTC.
+   * Sirve para consultar por índice en vez de escanear la colección entera.
+   */
+  candidateDates() {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const seen = new Set();
+    const dates = [];
+
+    const add = (day, month) => {
+      const key = `${day}-${month}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      dates.push({ day, month });
+    };
+
+    for (const offset of [-DAY_MS, 0, DAY_MS]) {
+      const d = new Date(now + offset);
+      const month = d.getUTCMonth() + 1;
+      const day = d.getUTCDate();
+      add(day, month);
+      // Los cumpleaños del 29/02 se celebran el 28/02 en años no bisiestos.
+      if (month === 2 && day === 28) add(29, 2);
+    }
+
+    return dates;
+  }
+
+  /**
    * Función principal que verifica cumpleaños
    */
   async checkBirthdays() {
     try {
-      logger.info('🎂 Verificando cumpleaños...');
+      logger.info('Verificando cumpleaños...');
 
-      // Obtener TODOS los usuarios con cumpleaños configurado
+      // Solo los cumpleaños que podrían caer hoy en alguna zona horaria, con
+      // proyección: antes se cargaba la colección `users` completa cada hora.
       const usersWithBirthdays = await User.find({
-        'birthday.day': { $ne: null },
-        'birthday.month': { $ne: null }
-      }).lean();
+        $or: this.candidateDates().map(({ day, month }) => ({
+          'birthday.day': day,
+          'birthday.month': month
+        }))
+      }).select('userId guildId birthday').lean();
 
       if (usersWithBirthdays.length === 0) {
-        logger.info('No hay usuarios con cumpleaños configurado');
+        logger.info('No hay cumpleaños candidatos en esta franja');
         return;
       }
 
@@ -162,20 +203,26 @@ class BirthdayChecker {
         logger.info(`🎉 ¡Es el cumpleaños de ${userId}! Timezone: ${timezone}`);
 
         // Enviar mensaje en cada guild donde esté el usuario y el bot
+        let sentSomewhere = false;
         for (const guildId of guilds) {
           try {
-            await this.sendBirthdayMessage(guildId, userId);
-            celebratedCount++;
+            if (await this.sendBirthdayMessage(guildId, userId)) {
+              sentSomewhere = true;
+              celebratedCount++;
+            }
           } catch (error) {
             logger.error(`Error enviando cumpleaños en guild ${guildId}:`, error);
           }
         }
 
-        // Marcar como celebrado
-        await User.updateMany(
-          { userId },
-          { $set: { 'birthday.lastCelebrated': new Date() } }
-        );
+        // Marcar como celebrado solo si el saludo llegó a algún sitio: antes se
+        // marcaba igualmente y el cumpleaños se perdía durante un año.
+        if (sentSomewhere) {
+          await User.updateMany(
+            { userId },
+            { $set: { 'birthday.lastCelebrated': new Date() } }
+          );
+        }
       }
 
       if (celebratedCount > 0) {
@@ -195,11 +242,11 @@ class BirthdayChecker {
   async sendBirthdayMessage(guildId, userId) {
     try {
       // Obtener configuración del guild
-      const guildConfig = await Guild.findOne({ guildId }).lean();
+      const guildConfig = await getGuildConfig(guildId);
       
       if (!guildConfig || !guildConfig.birthdays?.enabled) {
         logger.info(`Cumpleaños deshabilitado en guild ${guildId}`);
-        return;
+        return false;
       }
 
       const { birthdays } = guildConfig;
@@ -279,7 +326,8 @@ class BirthdayChecker {
         });
       }
 
-      logger.info(`🎂 Mensaje de cumpleaños enviado para ${member.user.tag} en ${guild.name}`);
+      logger.info(`Mensaje de cumpleaños enviado para ${member.user.tag} en ${guild.name}`);
+      return true;
 
     } catch (error) {
       logger.error(`Error enviando mensaje de cumpleaños en guild ${guildId}:`, error);

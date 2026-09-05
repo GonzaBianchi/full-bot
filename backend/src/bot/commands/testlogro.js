@@ -1,4 +1,6 @@
-import { SlashCommandBuilder, PermissionFlagsBits, AttachmentBuilder } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, AttachmentBuilder, MessageFlags } from 'discord.js';
+import { getEnabledAchievements } from '../../utils/achievementDefsCache.js';
+import { formatTarget } from '../../utils/achievementFormat.js';
 import Achievement from '../../models/Achievement.js';
 import GuildModel from '../../models/Guild.js';
 import { generateAchievementNotification } from '../utils/achievementImageGenerator.js';
@@ -48,15 +50,13 @@ export default {
       const focusedValue = interaction.options.getFocused().toLowerCase();
       const guildId = interaction.guildId;
 
-      logger.info(`Autocomplete de testlogro: búsqueda="${focusedValue}" en guild ${guildId}`);
+      logger.debug(`Autocomplete de testlogro: búsqueda="${focusedValue}" en guild ${guildId}`);
 
-      // Buscar logros habilitados en este servidor
-      const achievements = await Achievement.find({ 
-        guildId, 
-        enabled: true 
-      }).lean();
+      // Desde la caché de definiciones: el autocomplete se dispara con cada
+      // tecla y esto era una consulta a Mongo por pulsación.
+      const achievements = await getEnabledAchievements(guildId);
 
-      logger.info(`Logros encontrados: ${achievements.length}`);
+      logger.debug(`Logros encontrados: ${achievements.length}`);
 
       // Si no hay búsqueda específica, mostrar todos
       let filtered = achievements;
@@ -96,7 +96,7 @@ export default {
 
   async execute(interaction) {
     try {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const achievementId = interaction.options.getString('logro');
       const tierNumber = interaction.options.getInteger('tier');
@@ -109,7 +109,7 @@ export default {
       if (!targetChannel.isTextBased()) {
         return await interaction.editReply({
           content: '❌ El canal seleccionado debe ser un canal de texto.',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -123,7 +123,7 @@ export default {
         logger.warn(`Logro no encontrado: ${achievementId}`);
         return await interaction.editReply({
           content: '❌ No se encontró el logro especificado o no pertenece a este servidor.',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -136,7 +136,7 @@ export default {
         if (!tier) {
           return await interaction.editReply({
             content: `❌ El logro "${achievement.name}" no tiene un tier ${tierNumber}. Tiers disponibles: ${achievement.tiers.map(t => t.tier).join(', ')}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
         }
       } else {
@@ -193,33 +193,7 @@ export default {
         allowedMentions: { users: [targetUser.id] }
       });
 
-      // Formato de la meta para el mensaje de confirmación
-      let targetFormatted = '';
-      switch (achievement.type) {
-        case 'messages':
-          targetFormatted = `${tier.target.toLocaleString()} mensajes`;
-          break;
-        case 'reactions':
-          targetFormatted = `${tier.target.toLocaleString()} reacciones recibidas`;
-          break;
-        case 'reactions_given':
-          targetFormatted = `${tier.target.toLocaleString()} reacciones dadas`;
-          break;
-        case 'voice_time':
-          const hours = Math.floor(tier.target / 3600);
-          const minutes = Math.floor((tier.target % 3600) / 60);
-          if (hours > 0) {
-            targetFormatted = `${hours}h ${minutes}m en voz`;
-          } else {
-            targetFormatted = `${minutes}m en voz`;
-          }
-          break;
-        case 'boost':
-          targetFormatted = 'Boostear el servidor';
-          break;
-        default:
-          targetFormatted = `${tier.target.toLocaleString()}`;
-      }
+      const targetFormatted = formatTarget(achievement.type, tier.target);
 
       // Confirmar al usuario que ejecutó el comando
       await interaction.editReply({
@@ -230,7 +204,7 @@ export default {
                  `**Meta:** ${targetFormatted}\n` +
                  `**Usuario:** ${targetUser.tag}\n` +
                  `**Imagen personalizada:** ${imageConfig.url ? '✅ Sí' : '❌ No (usando predeterminada)'}`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
 
       logger.info(`Test de logro ejecutado exitosamente por ${interaction.user.tag}: ${achievement.name} - ${tier.title}`);
@@ -244,9 +218,10 @@ export default {
                           '• El bot tenga permisos para enviar mensajes en el canal';
       
       if (interaction.deferred) {
-        await interaction.editReply({ content: errorMessage, ephemeral: true });
+        // editReply no puede cambiar el carácter efímero de la respuesta.
+        await interaction.editReply({ content: errorMessage });
       } else {
-        await interaction.reply({ content: errorMessage, ephemeral: true });
+        await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
       }
     }
   }

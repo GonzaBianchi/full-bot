@@ -1,14 +1,16 @@
 // frontend/src/components/guild-settings/MediaFilterSettings.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Film, Hash, MessageSquare, Image, Video, FileImage, Link, AlertCircle } from 'lucide-react';
 import { SectionCard } from '../ui/SectionCard';
 import { StickyActionBar } from '../ui/StickyActionBar';
 import { StyledSelect } from '../ui/StyledSelect';
 import { InfoAlert } from '../ui/InfoAlert';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import toast from 'react-hot-toast';
-import api from '../../services/api';
+import { mediaFilterService, getApiError } from '../../services/api';
+import { useGuildSettings } from '../../hooks/useGuildSettings';
+import { useGuildInvalidation } from '../../hooks/queries';
 
-// ========== Configuración por defecto ==========
 const DEFAULT_SETTINGS = {
   enabled: false,
   sourceChannels: [],
@@ -22,45 +24,18 @@ const DEFAULT_SETTINGS = {
   customMessage: '📎 **{author}** compartió multimedia desde #{channel}'
 };
 
-export function MediaFilterSettings({ guildId, config, channels, roles }) {
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [originalSettings, setOriginalSettings] = useState(null);
+export function MediaFilterSettings() {
+  // `GET /config` ya trae el bloque `mediaFilter`, así que este componente no
+  // necesita su propia petición a `/config/media-filter`.
+  const {
+    guildId,
+    channels,
+    mediaFilter: { draft: settings, setDraft: setSettings, hasChanges, markSaved, discard }
+  } = useGuildSettings();
+
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadSettings();
-  }, [guildId]);
-
-  const loadSettings = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get(`/api/guilds/${guildId}/config/media-filter`);
-      
-      const mediaFilterConfig = response.data?.mediaFilter || DEFAULT_SETTINGS;
-      
-      const validatedConfig = {
-        enabled: mediaFilterConfig.enabled ?? DEFAULT_SETTINGS.enabled,
-        sourceChannels: mediaFilterConfig.sourceChannels || DEFAULT_SETTINGS.sourceChannels,
-        targetChannelId: mediaFilterConfig.targetChannelId ?? DEFAULT_SETTINGS.targetChannelId,
-        types: mediaFilterConfig.types || DEFAULT_SETTINGS.types,
-        includeEmbeds: mediaFilterConfig.includeEmbeds ?? DEFAULT_SETTINGS.includeEmbeds,
-        customMessage: mediaFilterConfig.customMessage || DEFAULT_SETTINGS.customMessage
-      };
-      
-      setSettings(validatedConfig);
-      setOriginalSettings(validatedConfig);
-    } catch (error) {
-      console.error('Error loading media filter settings:', error);
-      toast.error('Error al cargar configuración del filtro multimedia');
-      setSettings(DEFAULT_SETTINGS);
-      setOriginalSettings(DEFAULT_SETTINGS);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const { invalidateConfig } = useGuildInvalidation(guildId);
 
   const handleSave = async () => {
     if (settings.enabled && settings.sourceChannels.length === 0) {
@@ -75,66 +50,35 @@ export function MediaFilterSettings({ guildId, config, channels, roles }) {
 
     setSaving(true);
     try {
-      const response = await api.post(`/api/guilds/${guildId}/config/media-filter`, settings);
-      
-      if (response.data && response.data.mediaFilter) {
-        const updatedConfig = {
-          enabled: response.data.mediaFilter.enabled ?? settings.enabled,
-          sourceChannels: response.data.mediaFilter.sourceChannels || settings.sourceChannels,
-          targetChannelId: response.data.mediaFilter.targetChannelId ?? settings.targetChannelId,
-          types: response.data.mediaFilter.types || settings.types,
-          includeEmbeds: response.data.mediaFilter.includeEmbeds ?? settings.includeEmbeds,
-          customMessage: response.data.mediaFilter.customMessage || settings.customMessage
-        };
-        
-        setSettings(updatedConfig);
-        setOriginalSettings(updatedConfig);
-        toast.success('✅ Configuración del filtro multimedia guardada');
-      } else {
-        setOriginalSettings(settings);
-        toast.success('✅ Configuración guardada');
-      }
+      const { data } = await mediaFilterService.update(guildId, settings);
+      markSaved(data?.mediaFilter ?? settings);
+      await invalidateConfig();
+      toast.success('✅ Configuración del filtro multimedia guardada');
     } catch (error) {
       console.error('Error saving media filter settings:', error);
-      const errorMsg = error.response?.data?.error || 'Error al guardar configuración';
-      toast.error(errorMsg);
+      toast.error(getApiError(error, 'Error al guardar configuración'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleReset = async () => {
-    if (!confirm('¿Estás seguro de resetear la configuración del filtro multimedia?')) return;
-    
+    setConfirmingReset(false);
     setSaving(true);
     try {
-      const response = await api.delete(`/api/guilds/${guildId}/config/media-filter`);
-      
-      if (response.data && response.data.mediaFilter) {
-        const resetConfig = {
-          enabled: response.data.mediaFilter.enabled ?? DEFAULT_SETTINGS.enabled,
-          sourceChannels: response.data.mediaFilter.sourceChannels || DEFAULT_SETTINGS.sourceChannels,
-          targetChannelId: response.data.mediaFilter.targetChannelId ?? DEFAULT_SETTINGS.targetChannelId,
-          types: response.data.mediaFilter.types || DEFAULT_SETTINGS.types,
-          includeEmbeds: response.data.mediaFilter.includeEmbeds ?? DEFAULT_SETTINGS.includeEmbeds,
-          customMessage: response.data.mediaFilter.customMessage || DEFAULT_SETTINGS.customMessage
-        };
-        
-        setSettings(resetConfig);
-        setOriginalSettings(resetConfig);
-      } else {
-        setSettings(DEFAULT_SETTINGS);
-        setOriginalSettings(DEFAULT_SETTINGS);
-      }
-      
+      const { data } = await mediaFilterService.reset(guildId);
+      markSaved(data?.mediaFilter ?? DEFAULT_SETTINGS);
+      await invalidateConfig();
       toast.success('✅ Configuración reseteada');
     } catch (error) {
       console.error('Error resetting media filter settings:', error);
-      toast.error('Error al resetear configuración');
+      toast.error(getApiError(error, 'Error al resetear configuración'));
     } finally {
       setSaving(false);
     }
   };
+
+  const handleDiscard = () => discard();
 
   const handleSourceChannelToggle = (channelId) => {
     setSettings(prev => ({
@@ -144,28 +88,6 @@ export function MediaFilterSettings({ guildId, config, channels, roles }) {
         : [...prev.sourceChannels, channelId]
     }));
   };
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white flex items-center space-x-3">
-              <Film className="w-8 h-8 text-purple-400" />
-              <span>Filtro de Multimedia</span>
-            </h2>
-            <p className="text-gray-400 mt-1">
-              Captura y reenvía automáticamente contenido multimedia
-            </p>
-          </div>
-        </div>
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto"></div>
-          <p className="text-gray-400 mt-4">Cargando configuración...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Preparar opciones para los selects
   const channelOptions = channels.map(ch => ({ id: ch.id, name: `# ${ch.name}` }));
@@ -183,8 +105,20 @@ export function MediaFilterSettings({ guildId, config, channels, roles }) {
         hasChanges={hasChanges}
         saving={saving}
         onSave={handleSave}
-        onReset={handleReset}
+        onReset={() => setConfirmingReset(true)}
+        onDiscard={handleDiscard}
+        resetText="Valores por defecto"
         saveText="Guardar Configuración"
+      />
+
+      <ConfirmDialog
+        open={confirmingReset}
+        danger
+        title="Restablecer el filtro multimedia"
+        description="Se borra la configuración guardada y vuelve a los valores por defecto. Esta acción no se puede deshacer."
+        confirmText="Restablecer"
+        onConfirm={handleReset}
+        onCancel={() => setConfirmingReset(false)}
       />
 
       {/* Header */}
